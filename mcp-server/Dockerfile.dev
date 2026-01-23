@@ -1,0 +1,21 @@
+# Development Dockerfile for MCP Server
+# Supports hot-reload and debugging
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies (will be overridden by volume mount in dev)
+COPY package*.json ./
+RUN npm install
+
+# Copy development configuration
+COPY . .
+
+# Expose ports
+# 4000: MCP server
+# 9229: Node.js debugger
+EXPOSE 4000 9229
+
+# Development mode - watch for changes
+CMD ["npm", "run", "dev"]
