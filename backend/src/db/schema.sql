@@ -60,8 +60,13 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Indexes
+-- Indexes for performance optimization
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_cards_column ON cards(column_id);
+CREATE INDEX IF NOT EXISTS idx_cards_created_at ON cards(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_columns_board ON columns(board_id);
+CREATE INDEX IF NOT EXISTS idx_columns_position ON columns(position);
 CREATE INDEX IF NOT EXISTS idx_boards_user ON boards(user_id);
+CREATE INDEX IF NOT EXISTS idx_boards_created_at ON boards(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_columns_updated_at ON columns(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cards_updated_at ON cards(updated_at DESC);

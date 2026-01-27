@@ -21,6 +21,7 @@ RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nodejs -u 1001
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/src/db ./dist/db
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 

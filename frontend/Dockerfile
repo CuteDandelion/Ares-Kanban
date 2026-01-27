@@ -22,10 +22,11 @@ RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nodejs -u 1001
 
 # Copy necessary files
-COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
+# Copy public directory if it exists
+RUN if [ -d /app/public ]; then mkdir -p ./public && cp -r /app/public/* ./public/; fi
 
 USER nodejs
 

@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Testing
+coverage/
+*.lcov
+.nyc_output/
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+*.log
+
+# Environment files (NEVER COMMIT THESE)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.test
+.env.development
+backend/.env.test
+frontend/.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Misc
+*.pid
+*.seed
+*.bak
+*.backup
+*.tmp
+nul

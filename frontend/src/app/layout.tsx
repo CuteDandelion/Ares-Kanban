@@ -2,8 +2,10 @@ import './globals.css'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Multi-Agent Kanban Board',
-  description: 'Kanban board with AI agent integration',
+  title: 'ARES - Project Management',
+  description: 'Modern project management with gaming aesthetics',
+  viewport: 'width=device-width, initial-scale=1',
+  themeColor: '#0a0a0a',
 }
 
 export default function RootLayout({
@@ -13,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="bg-background text-foreground">{children}</body>
     </html>
   )
 }

@@ -1,3 +1,145 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Custom scrollbar styling for gaming aesthetic */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-background-secondary;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary rounded-sm;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary-hover;
+  }
+}
+
+@layer components {
+  /* Card styles with gaming aesthetic */
+  .card-gradient {
+    background: linear-gradient(135deg, #dc2626 0%, #7c2d12 100%);
+  }
+
+  /* Card priority colors */
+  .priority-high {
+    @apply border-l-4 border-red-600;
+  }
+
+  .priority-medium {
+    @apply border-l-4 border-yellow-500;
+  }
+
+  .priority-low {
+    @apply border-l-4 border-green-500;
+  }
+
+  /* Card visual indicator - accent bar on left side */
+  .card-indicator {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card-indicator::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: linear-gradient(180deg, rgba(220, 38, 38, 0.8) 0%, rgba(220, 38, 38, 0.3) 100%);
+    box-shadow: 0 0 8px rgba(220, 38, 38, 0.4);
+    transition: all 0.3s ease;
+  }
+
+  .card-indicator:hover::before {
+    background: linear-gradient(180deg, rgba(220, 38, 38, 1) 0%, rgba(220, 38, 38, 0.5) 100%);
+    box-shadow: 0 0 12px rgba(220, 38, 38, 0.6);
+    width: 5px;
+  }
+
+  /* Sidebar transitions */
+  .sidebar-transition {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Card hover effect */
+  .card-hover-effect {
+    @apply transition-all duration-200 hover:shadow-lg hover:shadow-red-900/20 hover:scale-[1.02];
+  }
+
+  /* Button hover effects */
+  .btn-gaming {
+    @apply relative overflow-hidden transition-all duration-300;
+  }
+
+  .btn-gaming::before {
+    content: '';
+    @apply absolute inset-0 bg-white/10 opacity-0 transition-opacity duration-300;
+  }
+
+  .btn-gaming:hover::before {
+    @apply opacity-100;
+  }
+
+  /* Header glow effect */
+  .header-glow {
+    box-shadow: 0 2px 10px rgba(220, 38, 38, 0.15);
+  }
+
+  /* Glassmorphism effect */
+  .glass-effect {
+    background: rgba(26, 26, 26, 0.8);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  /* Focus states for accessibility */
+  .focus-ring:focus {
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+
+  /* Text selection */
+  ::selection {
+    @apply bg-primary text-white;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    @apply border-4 border-gray-700 border-t-primary rounded-full animate-spin;
+  }
+}
+
+@layer utilities {
+  /* Text visibility helpers */
+  .text-visible {
+    @apply text-foreground;
+  }
+
+  .text-muted-visible {
+    @apply text-foreground-muted;
+  }
+
+  /* Background patterns */
+  .bg-pattern {
+    background-image:
+      radial-gradient(circle at 50% 0%, rgba(220, 38, 38, 0.1) 0%, transparent 50%),
+      radial-gradient(circle at 0% 100%, rgba(124, 45, 18, 0.05) 0%, transparent 50%);
+  }
+}
