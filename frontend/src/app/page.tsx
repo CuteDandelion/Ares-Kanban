@@ -3,6 +3,7 @@
 import * as React from "react"
 import { motion } from "framer-motion"
 import { AresThemeProvider } from "@/contexts/ThemeProvider"
+import useSWR, { useSWRConfig } from 'swr'
 import { columnApi, cardApi } from "@/services/api"
 import { Toaster } from "@/components/ui/sonner"
 import KanbanBoard from "@/components/KanbanBoard/Board"
@@ -27,37 +28,34 @@ interface Card {
   updated_at?: string
 }
 
+// SWR configuration for better error handling and revalidation
+const swrConfig = useSWRConfig({
+  revalidateOnFocus: true,
+  revalidateOnReconnect: true,
+  shouldRetryOnError: false,
+  onError: (error) => {
+    console.error('SWR Error:', error)
+    const errorMessage = (error as any)?.userMessage || 'An error occurred'
+    toast.error(errorMessage)
+  },
+})
+
 export default function Home() {
-  const [columns, setColumns] = React.useState<Column[]>([])
-  const [cards, setCards] = React.useState<Card[]>([])
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
   const [selectedCard, setSelectedCard] = React.useState<Card | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [error, setError] = React.useState<string | null>(null)
 
-  const fetchColumns = async () => {
-    try {
-      const response = await columnApi.getAll()
-      setColumns(response.data)
-    } catch (err: any) {
-      const errorMessage = err.userMessage || 'Failed to load columns'
-      setError(errorMessage)
-      console.error('Error fetching columns:', err)
-      toast.error(errorMessage)
-    }
-  }
+  // SWR hooks for automatic real-time data fetching and caching
+  const { data: columns = [], mutate: mutateColumns } = useSWR<Column[]>(
+    '/board/columns',
+    async () => columnApi.getAll().then(res => res.data),
+    swrConfig
+  )
 
-  const fetchCards = async () => {
-    try {
-      const response = await cardApi.getAll()
-      setCards(response.data)
-    } catch (err: any) {
-      const errorMessage = err.userMessage || 'Failed to load cards'
-      setError(errorMessage)
-      console.error('Error fetching cards:', err)
-      toast.error(errorMessage)
-    }
-  }
+  const { data: cards = [], mutate: mutateCards } = useSWR<Card[]>(
+    '/board/cards',
+    async () => cardApi.getAll().then(res => res.data),
+    swrConfig
+  )
 
   const handleAddCard = async (data: { column_id: string; title: string; description: string; metadata?: any }) => {
     try {
@@ -65,14 +63,17 @@ export default function Home() {
         ...data,
         position: cards.filter((c) => c.column_id === data.column_id).length,
       })
-      // Add new card to local state immediately for better UX
-      setCards(prevCards => [...prevCards, response.data])
+
+      // Optimistic update - update local state immediately
+      mutateCards((prevCards) => [...(prevCards || []), response.data], {
+        rollbackOnError: true,
+        populateCache: true,
+      })
+
       toast.success('Card added successfully')
     } catch (err: any) {
       console.error('Failed to add card:', err)
       toast.error(err.userMessage || 'Failed to add card')
-      // Refresh cards from API if add fails to ensure consistency
-      await fetchCards()
     }
   }
 
@@ -86,46 +87,56 @@ export default function Home() {
         board_id: boardId,
         position: columns.length,
       })
-      // Add new column to local state immediately for better UX
-      setColumns(prevColumns => [...prevColumns, response.data])
+
+      // Optimistic update
+      mutateColumns((prevColumns) => [...(prevColumns || []), response.data], {
+        rollbackOnError: true,
+        populateCache: true,
+      })
+
       toast.success('Column added successfully')
     } catch (err: any) {
       console.error('Failed to add column:', err)
       toast.error(err.userMessage || 'Failed to add column')
-      // Refresh columns from API if add fails to ensure consistency
-      await fetchColumns()
     }
   }
 
   const handleUpdateCard = async (id: string, data: any) => {
     try {
       const response = await cardApi.update(id, data)
-      // Update local state immediately for better UX
-      setCards(prevCards =>
-        prevCards.map(card =>
+
+      // Optimistic update
+      mutateCards((prevCards) =>
+        (prevCards || []).map(card =>
           card.id === id ? { ...card, ...response.data } : card
-        )
+        ),
+        {
+          rollbackOnError: true,
+          populateCache: true,
+        }
       )
+
       toast.success('Card updated successfully')
     } catch (err: any) {
       console.error('Failed to update card:', err)
       toast.error(err.userMessage || 'Failed to update card')
-      // Refresh cards from API if update fails to ensure consistency
-      await fetchCards()
     }
   }
 
   const handleDeleteCard = async (id: string) => {
     try {
       await cardApi.delete(id)
-      // Remove from local state immediately for better UX
-      setCards(prevCards => prevCards.filter(card => card.id !== id))
+
+      // Optimistic update
+      mutateCards((prevCards) => (prevCards || []).filter(card => card.id !== id), {
+        rollbackOnError: true,
+        populateCache: true,
+      })
+
       toast.success('Card deleted successfully')
     } catch (err: any) {
       console.error('Failed to delete card:', err)
       toast.error(err.userMessage || 'Failed to delete card')
-      // Refresh cards from API if delete fails to ensure consistency
-      await fetchCards()
     }
   }
 
@@ -140,34 +151,44 @@ export default function Home() {
   const handleUpdateColumn = async (id: string, name: string) => {
     try {
       const response = await columnApi.update(id, { name })
-      // Update local state immediately for better UX
-      setColumns(prevColumns =>
-        prevColumns.map(col =>
+
+      // Optimistic update - update column name in real-time
+      mutateColumns((prevColumns) =>
+        (prevColumns || []).map(col =>
           col.id === id ? { ...col, name } : col
-        )
+        ),
+        {
+          rollbackOnError: true,
+          populateCache: true,
+        }
       )
+
       toast.success('Column name updated successfully')
     } catch (error) {
       console.error('Failed to save column name:', error)
       toast.error('Failed to update column name')
-      // Refresh columns from API if update fails to ensure consistency
-      await fetchColumns()
     }
   }
 
   const handleDeleteColumn = async (id: string) => {
     try {
       await columnApi.delete(id)
-      // Remove column and its cards from local state immediately for better UX
-      setColumns(prevColumns => prevColumns.filter(col => col.id !== id))
-      setCards(prevCards => prevCards.filter(card => card.column_id !== id))
+
+      // Optimistic update - remove column and its cards
+      mutateColumns((prevColumns) => (prevColumns || []).filter(col => col.id !== id), {
+        rollbackOnError: true,
+        populateCache: true,
+      })
+
+      mutateCards((prevCards) => (prevCards || []).filter(card => card.column_id !== id), {
+        rollbackOnError: true,
+        populateCache: true,
+      })
+
       toast.success('Column deleted successfully')
     } catch (error) {
       console.error('Failed to delete column:', error)
       toast.error('Failed to delete column')
-      // Refresh from API if delete fails to ensure consistency
-      await fetchColumns()
-      await fetchCards()
     }
   }
 
@@ -184,15 +205,18 @@ export default function Home() {
       // Call API to persist new order
       await columnApi.reorder(columnsToReorder)
 
-      // Update local state with new positions
-      setColumns(newColumns.map((col, index) => ({ ...col, position: index })))
+      // Optimistic update
+      mutateColumns(newColumns, {
+        rollbackOnError: true,
+        populateCache: true,
+      })
 
       toast.success('Columns reordered successfully')
     } catch (error) {
       console.error('Failed to reorder columns:', error)
       toast.error('Failed to reorder columns')
       // Revert to original order if API call fails
-      await fetchColumns()
+      mutateColumns()
     }
   }
 
@@ -200,38 +224,28 @@ export default function Home() {
     try {
       await cardApi.move(cardId, { column_id: newColumnId, position: newPosition })
 
-      // Update local state immediately for better UX
-      setCards(prevCards =>
-        prevCards.map(card =>
+      // Optimistic update - update card in real-time
+      mutateCards((prevCards) =>
+        (prevCards || []).map(card =>
           card.id === cardId
             ? { ...card, column_id: newColumnId, position: newPosition, updated_at: new Date().toISOString() }
             : card
-        )
+        ),
+        {
+          rollbackOnError: true,
+          populateCache: true,
+        }
       )
 
       toast.success('Card moved successfully')
     } catch (err: any) {
       console.error('Failed to move card:', err)
       toast.error(err.userMessage || 'Failed to move card')
-      // Refresh cards from API if move fails to ensure consistency
-      await fetchCards()
     }
   }
 
-  React.useEffect(() => {
-    // Fetch both columns and cards in parallel, then set loading to false
-    Promise.all([fetchColumns(), fetchCards()])
-      .then(() => {
-        setLoading(false)
-      })
-      .catch((err) => {
-        console.error('Error loading data:', err)
-        setLoading(false)
-      })
-  }, [])
-
   // Loading state
-  if (loading) {
+  if (!columns || !cards) {
     return (
       <AresThemeProvider>
         <Toaster />
@@ -274,10 +288,7 @@ export default function Home() {
   }
 
   // Error state
-  if (error) {
-    const isNetworkError = error.includes('Network Error') || error.includes('Connection Refused')
-    const apiURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-
+  if (!columns) {
     return (
       <AresThemeProvider>
         <Toaster />
@@ -306,7 +317,7 @@ export default function Home() {
                 transition={{ delay: 0.3 }}
                 className="text-2xl font-bold text-foreground text-center mb-4"
               >
-                {isNetworkError ? 'Connection Error' : 'Error Loading Data'}
+                Error Loading Data
               </motion.h2>
 
               {/* Error Message */}
@@ -314,56 +325,22 @@ export default function Home() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.4 }}
-                className="text-foreground-muted/80 text-center mb-6 whitespace-pre-wrap"
+                className="text-foreground-muted/80 text-center mb-6"
               >
-                {error}
+                Unable to load board data. Please try again.
               </motion.p>
-
-              {/* Troubleshooting Steps */}
-              {isNetworkError && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.5 }}
-                  className="bg-card/50 rounded-lg border border-border/50 p-4 mb-6"
-                >
-                  <p className="font-semibold text-foreground mb-3">Troubleshooting Steps:</p>
-                  <ol className="list-decimal list-inside space-y-3 text-sm text-foreground-muted/80">
-                    <li>
-                      Check if backend is running:
-                      <code className="block mt-1 ml-4 bg-background p-2 rounded border border-border/50 font-mono text-xs">
-                        docker ps | grep kanban-backend
-                      </code>
-                    </li>
-                    <li>
-                      Verify backend health:
-                      <code className="block mt-1 ml-4 bg-background p-2 rounded border border-border/50 font-mono text-xs">
-                        curl {apiURL}/health
-                      </code>
-                    </li>
-                    <li>
-                      Check backend logs:
-                      <code className="block mt-1 ml-4 bg-background p-2 rounded border border-border/50 font-mono text-xs">
-                        docker logs kanban-backend
-                      </code>
-                    </li>
-                  </ol>
-                </motion.div>
-              )}
 
               {/* Retry Button */}
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.6 }}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
                 className="flex justify-center"
               >
                 <button
                   onClick={() => {
-                    setLoading(true)
-                    setError(null)
-                    fetchColumns()
-                    fetchCards()
+                    mutateColumns()
+                    mutateCards()
                   }}
                   className="flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary-hover text-white rounded-lg font-semibold transition-all duration-300 btn-gaming focus-ring"
                 >
@@ -383,8 +360,8 @@ export default function Home() {
     <AresThemeProvider>
       <Toaster />
       <KanbanBoard
-        columns={columns}
-        cards={cards}
+        columns={columns || []}
+        cards={cards || []}
         sidebarOpen={sidebarOpen}
         selectedCard={selectedCard}
         onAddCard={handleAddCard}
