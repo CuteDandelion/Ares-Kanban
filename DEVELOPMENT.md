@@ -4,10 +4,21 @@ This file tracks all development activities, files created, and important contex
 
 ---
 
-## [2026-01-31] SPRINT 1 MODULE 1.4: Task Queue and State Machine - Complete with 92.37% Coverage
+## [2026-01-31] SPRINT 1 MODULE 1.4: Task Queue and State Machine - Complete with 92.37% Coverage + Agents Restored
 
 ### Summary
 Implemented Sprint 1 Module 1.4: Task Queue and State Machine for the Ares Agent System. This module provides the core task management infrastructure with priority-based queuing, validated state transitions, and comprehensive test coverage. Followed git hygiene with feature branch and PR creation.
+
+**Note:** Initially the agents code (Modules 1.1-1.3) was missing because it was on a separate branch (`feature/issue-3-agent-system-sprints`). Cherry-picked the agents code to include the complete Sprint 1 infrastructure.
+
+### Git Hygiene Applied ✅
+- **Branch:** `feature/issue-5-task-queue-state-machine` (conventional naming)
+- **Commits:** 3 commits with conventional format
+  - `feat(execution): implement TaskQueue and TaskStateMachine`
+  - `feat(agents): restore Sprint 1 Modules 1.1-1.3 agent infrastructure`
+  - `fix(types): add agent types`
+- **PR Created:** #14 - Ready for review
+- **Issue:** Closes #5
 
 ### Git Hygiene Applied ✅
 - **Branch:** `feature/issue-5-task-queue-state-machine` (conventional naming)
@@ -53,17 +64,25 @@ Implemented Sprint 1 Module 1.4: Task Queue and State Machine for the Ares Agent
 3. `src/execution/index.ts`
    - Module exports for clean imports
 
+#### Agent Files (Restored from Sprint 1 Modules 1.1-1.3)
+4. `src/agents/base/BaseAgent.ts` - Abstract base class for all agents
+5. `src/agents/orchestrator/AresAgent.ts` - Project manager orchestrator agent
+6. `src/agents/specialist/EngineerAgent.ts` - Implementation specialist agent
+7. `src/agents/specialist/TesterAgent.ts` - Testing specialist agent
+8. `src/agents/registry.ts` - Agent registry and management
+
 #### Test Files
-4. `tests/execution/TaskQueue.test.ts` (401 lines)
+9. `tests/execution/TaskQueue.test.ts` (401 lines)
    - 45 test cases covering all TaskQueue functionality
    - Tests for priority ordering, dependencies, retry logic
 
-5. `tests/execution/TaskStateMachine.test.ts` (467 lines)
-   - 32 test cases for state machine and manager
-   - Tests for transitions, validators, history tracking
+10. `tests/execution/TaskStateMachine.test.ts` (467 lines)
+    - 32 test cases for state machine and manager
+    - Tests for transitions, validators, history tracking
 
 ### Modified Files
 - `src/types/index.ts` - Added Task, TaskStatus, TaskQueueStats, TaskStateMachine types
+- `src/types/agent.ts` - NEW: Agent system type definitions
 
 ### Features Implemented
 
@@ -84,6 +103,15 @@ Implemented Sprint 1 Module 1.4: Task Queue and State Machine for the Ares Agent
 - ✅ Transition hooks (onTransition, onError)
 - ✅ Terminal and active state helpers
 - ✅ Convenience methods (queue, assign, start, pause, resume, complete, fail, retry, cancel)
+
+#### Agent Infrastructure Features (Restored)
+- ✅ BaseAgent: Abstract base class with lifecycle management
+- ✅ AresAgent: Project manager orchestrator with task planning
+- ✅ EngineerAgent: Specialist for implementation tasks
+- ✅ TesterAgent: Specialist for testing and quality verification
+- ✅ Agent registry for agent management
+- ✅ Capability-based task assignment
+- ✅ Agent status tracking (idle, busy, paused, offline)
 
 ### API Usage Example
 
