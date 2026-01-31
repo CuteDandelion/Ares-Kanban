@@ -5,3 +5,10 @@ export {
   taskStateMachine, 
   taskStateManager 
 } from './TaskStateMachine'
+export { 
+  ExecutionEngine, 
+  executionEngine,
+  type EngineStatus,
+  type ExecutionMetrics,
+  type ExecutionEngineConfig,
+} from './ExecutionEngine'
