@@ -255,3 +255,95 @@ export interface OrganizationMember {
   role: 'owner' | 'admin' | 'editor' | 'viewer'
   joined_at: string
 }
+
+// Task Queue Types
+export type TaskStatus = 
+  | 'pending'
+  | 'queued'
+  | 'assigned'
+  | 'running'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'retrying'
+
+export type TaskPriority = 'critical' | 'high' | 'medium' | 'low'
+
+export interface Task {
+  id: string
+  title: string
+  description: string
+  status: TaskStatus
+  priority: TaskPriority
+  assignee_agent_id: string | null
+  creator_id: string
+  board_id: string | null
+  card_id: string | null
+  parent_task_id: string | null
+  dependencies: string[]
+  context: Record<string, any>
+  result: TaskResult | null
+  retry_count: number
+  max_retries: number
+  timeout_ms: number
+  started_at: string | null
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface TaskCreate {
+  title: string
+  description: string
+  priority?: TaskPriority
+  assignee_agent_id?: string
+  board_id?: string
+  card_id?: string
+  parent_task_id?: string
+  dependencies?: string[]
+  context?: Record<string, any>
+  max_retries?: number
+  timeout_ms?: number
+}
+
+export interface TaskResult {
+  success: boolean
+  output: string
+  artifacts?: Record<string, any>
+  execution_time_ms: number
+  logs: string[]
+}
+
+export interface TaskQueueStats {
+  total: number
+  pending: number
+  queued: number
+  assigned: number
+  running: number
+  paused: number
+  completed: number
+  failed: number
+  cancelled: number
+  retrying: number
+}
+
+export interface TaskFilter {
+  status?: TaskStatus
+  priority?: TaskPriority
+  assignee_agent_id?: string
+  board_id?: string
+}
+
+export type TaskStateTransition = {
+  from: TaskStatus
+  to: TaskStatus
+  action: string
+  validator?: (task: Task, context?: any) => boolean | Promise<boolean>
+}
+
+export interface StateMachineConfig {
+  transitions?: TaskStateTransition[]
+  onTransition?: (task: Task, from: TaskStatus, to: TaskStatus) => void | Promise<void>
+  onError?: (task: Task, error: Error) => void
+}
