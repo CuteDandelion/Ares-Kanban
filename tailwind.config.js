@@ -121,25 +121,88 @@ module.exports = {
           '0%': { transform: 'translateX(100%)', opacity: '0' },
           '100%': { transform: 'translateX(0)', opacity: '1' },
         },
+        'slide-up': {
+          '0%': { transform: 'translateY(20px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        'slide-down': {
+          '0%': { transform: 'translateY(-100%)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
         'fade-in': {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
         },
+        'pulse-status': {
+          '0%, 100%': { 
+            opacity: '1', 
+            transform: 'scale(1)',
+            boxShadow: '0 0 0 0 rgba(34, 197, 94, 0.7)'
+          },
+          '50%': { 
+            opacity: '0.8', 
+            transform: 'scale(1.1)',
+            boxShadow: '0 0 0 8px rgba(34, 197, 94, 0)'
+          },
+        },
+        'pulse-busy': {
+          '0%, 100%': { 
+            opacity: '1', 
+            transform: 'scale(1)',
+            boxShadow: '0 0 0 0 rgba(249, 115, 22, 0.7)'
+          },
+          '50%': { 
+            opacity: '0.7', 
+            transform: 'scale(1.2)',
+            boxShadow: '0 0 0 10px rgba(249, 115, 22, 0)'
+          },
+        },
+        'pulse-critical': {
+          '0%, 100%': { 
+            opacity: '1',
+            boxShadow: '0 0 0 0 rgba(220, 38, 38, 0.7)'
+          },
+          '50%': { 
+            opacity: '0.6',
+            boxShadow: '0 0 0 12px rgba(220, 38, 38, 0)'
+          },
+        },
+        'blink': {
+          '0%, 50%': { opacity: '1' },
+          '51%, 100%': { opacity: '0' },
+        },
+        'typing': {
+          '0%, 60%, 100%': { opacity: '0' },
+          '30%': { opacity: '1' },
+        },
   		},
-  		animation: {
-  			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out',
+   		animation: {
+   			'accordion-down': 'accordion-down 0.2s ease-out',
+   			'accordion-up': 'accordion-up 0.2s ease-out',
         'glow-pulse': 'glow-pulse 2s ease-in-out infinite',
         'slide-in-right': 'slide-in-right 0.3s ease-out',
+        'slide-up': 'slide-up 0.3s ease-out',
+        'slide-down': 'slide-down 0.3s ease-out',
         'fade-in': 'fade-in 0.2s ease-out',
-  		},
+        'pulse-status': 'pulse-status 2s ease-in-out infinite',
+        'pulse-busy': 'pulse-busy 1.5s ease-in-out infinite',
+        'pulse-critical': 'pulse-critical 1s ease-in-out infinite',
+        'blink': 'blink 1s step-end infinite',
+        'typing': 'typing 1.4s infinite',
+   		},
       boxShadow: {
         'glow-red': '0 0 20px rgba(220, 38, 38, 0.4)',
         'glow-red-sm': '0 0 10px rgba(220, 38, 38, 0.3)',
         'glow-red-lg': '0 0 30px rgba(220, 38, 38, 0.5)',
         'glow-cyan': '0 0 20px rgba(6, 182, 212, 0.4)',
-      }
-  	}
+        'cli': '0 -4px 20px rgba(220, 38, 38, 0.3)',
+        'card': '0 4px 12px rgba(0, 0, 0, 0.3)',
+      },
+      fontFamily: {
+        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      },
+    }
   },
   plugins: [require("tailwindcss-animate")],
 }
