@@ -26,11 +26,13 @@ import { Column } from './Column';
 import { ListView } from './ListView';
 import { AresButton } from '@/components/ui/ares-button';
 import { AresInput } from '@/components/ui/ares-input';
-import { Plus, ArrowLeft, LayoutList, Settings, X, Columns, Trash2, Calendar, Tag, AlertCircle } from 'lucide-react';
+import { Plus, ArrowLeft, LayoutList, Settings, X, Columns, Trash2, Calendar, Tag, AlertCircle, Terminal } from 'lucide-react';
 import { useKanbanStore } from '@/stores/kanbanStore';
 import { AresLogo } from '@/components/branding/AresLogo';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { CLIPanel } from '@/components/layout/CLIPanel';
+import { useCLI } from '@/cli/useCLI';
 
 interface BoardProps {
   boardId: string;
@@ -83,6 +85,15 @@ export function Board({ boardId }: BoardProps) {
   const [showAddColumn, setShowAddColumn] = useState(false);
   const [newColumnTitle, setNewColumnTitle] = useState('');
   
+  // CLI State
+  const [showCLI, setShowCLI] = useState(false);
+  const { messages, isProcessing, cliHeight, setCLIHeight, handleCommandSubmit, handleClearOutput } = useCLI({
+    onCommand: async (command) => {
+      // Handle commands that interact with the board
+      console.log('Command received:', command);
+    },
+  });
+  
   // DndKit sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -104,6 +115,23 @@ export function Board({ boardId }: BoardProps) {
       unsubscribeFromBoard();
     };
   }, [boardId, loadBoard, subscribeToBoard, unsubscribeFromBoard]);
+
+  // Keyboard shortcut for toggling CLI (Ctrl+`)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        setShowCLI(prev => !prev);
+      }
+      // Esc to close CLI
+      if (e.key === 'Escape' && showCLI) {
+        setShowCLI(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showCLI]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
@@ -437,6 +465,16 @@ export function Board({ boardId }: BoardProps) {
                 <Settings className="h-4 w-4" />
               </AresButton>
               
+              {/* CLI Toggle Button */}
+              <AresButton 
+                variant={showCLI ? 'primary' : 'secondary'}
+                size="icon"
+                onClick={() => setShowCLI(!showCLI)}
+                title="Toggle CLI"
+              >
+                <Terminal className="h-4 w-4" />
+              </AresButton>
+              
               {/* Add Column Button */}
               <AresButton 
                 size="icon"
@@ -683,6 +721,18 @@ export function Board({ boardId }: BoardProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* CLI Panel */}
+      {showCLI && (
+        <CLIPanel
+          messages={messages}
+          isProcessing={isProcessing}
+          height={cliHeight}
+          onHeightChange={setCLIHeight}
+          onCommandSubmit={handleCommandSubmit}
+          onClearOutput={handleClearOutput}
+        />
+      )}
 
       {/* Add Column Dialog */}
       <Dialog open={showAddColumn} onOpenChange={setShowAddColumn}>
