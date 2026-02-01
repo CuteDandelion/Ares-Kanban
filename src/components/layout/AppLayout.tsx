@@ -9,6 +9,10 @@ interface AppLayoutProps {
   rightSidebar?: React.ReactNode;
   cliPanel?: React.ReactNode;
   className?: string;
+  cliHeight?: number;
+  isCLIExpanded?: boolean;
+  onCLIHeightChange?: (height: number) => void;
+  onCLIToggle?: (expanded: boolean) => void;
 }
 
 /**
@@ -21,10 +25,28 @@ interface AppLayoutProps {
  * - Bottom CLI Panel (collapsible, 48px closed, 300px open)
  */
 const AppLayout = React.forwardRef<HTMLDivElement, AppLayoutProps>(
-  ({ children, leftSidebar, rightSidebar, cliPanel, className }, ref) => {
-    const [isCLIExpanded, setIsCLIExpanded] = React.useState(false);
+  ({ children, leftSidebar, rightSidebar, cliPanel, className, cliHeight = 300, isCLIExpanded: controlledIsCLIExpanded, onCLIHeightChange, onCLIToggle }, ref) => {
+    const [internalIsCLIExpanded, setInternalIsCLIExpanded] = React.useState(false);
+    const isCLIExpanded = controlledIsCLIExpanded !== undefined ? controlledIsCLIExpanded : internalIsCLIExpanded;
+    const setIsCLIExpanded = React.useCallback((expanded: boolean) => {
+      if (controlledIsCLIExpanded === undefined) {
+        setInternalIsCLIExpanded(expanded);
+      }
+      onCLIToggle?.(expanded);
+    }, [controlledIsCLIExpanded, onCLIToggle]);
     const [isLeftExpanded, setIsLeftExpanded] = React.useState(false);
     const [isRightVisible, setIsRightVisible] = React.useState(true);
+
+    React.useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.ctrlKey && e.key === '`') {
+          e.preventDefault();
+          setIsCLIExpanded(!isCLIExpanded);
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isCLIExpanded, setIsCLIExpanded]);
 
     return (
       <div
@@ -54,7 +76,7 @@ const AppLayout = React.forwardRef<HTMLDivElement, AppLayoutProps>(
           <main
             className={cn(
               'flex-1 overflow-hidden relative',
-              isCLIExpanded && cliPanel && 'pb-[300px]',
+              isCLIExpanded && cliPanel && `pb-[${cliHeight}px]`,
               !isCLIExpanded && cliPanel && 'pb-12'
             )}
           >
@@ -68,7 +90,7 @@ const AppLayout = React.forwardRef<HTMLDivElement, AppLayoutProps>(
             <div
               className={cn(
                 'fixed bottom-0 left-16 right-0 transition-all duration-300 ease-out z-30',
-                isCLIExpanded ? 'h-[300px]' : 'h-12',
+                isCLIExpanded ? `h-[${cliHeight}px]` : 'h-12',
                 leftSidebar || 'left-0',
                 rightSidebar && isRightVisible && 'right-80'
               )}
@@ -87,7 +109,7 @@ const AppLayout = React.forwardRef<HTMLDivElement, AppLayoutProps>(
                       </span>
                     </div>
                     <span className="text-xs text-ares-dark-400">
-                      {isCLIExpanded ? 'Click to collapse' : 'Click to expand'}
+                      {isCLIExpanded ? 'Click to collapse' : 'Click to expand (Ctrl+`)'}
                     </span>
                   </div>
                   
@@ -111,9 +133,9 @@ const AppLayout = React.forwardRef<HTMLDivElement, AppLayoutProps>(
 
                 {/* CLI Content */}
                 <div className={cn(
-                  'h-[calc(100%-48px)] overflow-hidden',
+                  'overflow-hidden',
                   !isCLIExpanded && 'hidden'
-                )}>
+                )} style={{ height: cliHeight - 48 }}>
                   {cliPanel}
                 </div>
               </div>

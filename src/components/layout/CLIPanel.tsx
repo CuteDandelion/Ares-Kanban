@@ -3,8 +3,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-// CLI Message types
-interface CLIMessage {
+export interface CLIMessage {
   id: string;
   type: 'ares' | 'user' | 'agent' | 'system' | 'error' | 'success';
   content: string;
@@ -12,19 +11,61 @@ interface CLIMessage {
   agentName?: string;
 }
 
-interface CLIPanelProps {
+export type SyntaxToken = {
+  type: 'keyword' | 'string' | 'number' | 'flag' | 'identifier' | 'operator' | 'text';
+  value: string;
+};
+
+const COMMAND_KEYWORDS = [
+  'create', 'delete', 'move', 'rename', 'search', 'help', 'clear',
+  'card', 'column', 'board', 'agent', 'task', 'show', 'list'
+];
+
+const OPERATORS = ['in', 'to', 'from', 'with', 'by'];
+
+export interface CLIPanelProps {
   className?: string;
   onCommandSubmit?: (command: string) => void;
+  onClearOutput?: () => void;
   messages?: CLIMessage[];
   isProcessing?: boolean;
+  height?: number;
+  onHeightChange?: (height: number) => void;
 }
 
-// CLI Prompt component
+export interface AutocompleteSuggestion {
+  text: string;
+  description: string;
+  type: 'command' | 'argument' | 'flag';
+}
+
+export const AUTOCOMPLETE_SUGGESTIONS: AutocompleteSuggestion[] = [
+  { text: 'create', description: 'Create a new card, column, or board', type: 'command' },
+  { text: 'delete', description: 'Delete a card or column', type: 'command' },
+  { text: 'move', description: 'Move a card to another column', type: 'command' },
+  { text: 'rename', description: 'Rename a card or column', type: 'command' },
+  { text: 'search', description: 'Search for cards', type: 'command' },
+  { text: 'help', description: 'Show help information', type: 'command' },
+  { text: 'clear', description: 'Clear the CLI output', type: 'command' },
+  { text: 'card', description: 'Target a card', type: 'argument' },
+  { text: 'column', description: 'Target a column', type: 'argument' },
+  { text: 'board', description: 'Target a board', type: 'argument' },
+  { text: 'agent', description: 'Target an agent', type: 'argument' },
+  { text: 'task', description: 'Target a task', type: 'argument' },
+  { text: 'show', description: 'Show details', type: 'command' },
+  { text: 'list', description: 'List items', type: 'command' },
+  { text: '--priority', description: 'Set priority (critical|high|medium|low)', type: 'flag' },
+  { text: '--description', description: 'Add a description', type: 'flag' },
+  { text: '--tags', description: 'Add tags (comma-separated)', type: 'flag' },
+  { text: '--assignee', description: 'Assign to user', type: 'flag' },
+  { text: '--due', description: 'Set due date', type: 'flag' },
+  { text: '--status', description: 'Set status', type: 'flag' },
+];
+
 const CLIPrompt = () => (
   <span className="text-ares-red-500 font-mono font-bold">ARES&gt;</span>
 );
 
-// Message type icons
 const MessageIcon = ({ type }: { type: CLIMessage['type'] }) => {
   switch (type) {
     case 'ares':
@@ -42,7 +83,6 @@ const MessageIcon = ({ type }: { type: CLIMessage['type'] }) => {
   }
 };
 
-// Message type colors
 const messageTypeClasses = {
   ares: 'text-ares-red-400',
   user: 'text-ares-red-300',
@@ -52,208 +92,465 @@ const messageTypeClasses = {
   success: 'text-green-400',
 };
 
-const CLIPanel = React.forwardRef<HTMLDivElement, CLIPanelProps>(
-  ({ className, onCommandSubmit, messages = [], isProcessing = false }, ref) => {
-    const [input, setInput] = React.useState('');
-    const [history, setHistory] = React.useState<string[]>([]);
-    const [historyIndex, setHistoryIndex] = React.useState(-1);
-    const outputRef = React.useRef<HTMLDivElement>(null);
-    const inputRef = React.useRef<HTMLInputElement>(null);
+const tokenTypeClasses = {
+  keyword: 'text-purple-400 font-semibold',
+  string: 'text-green-400',
+  number: 'text-blue-400',
+  flag: 'text-yellow-400',
+  identifier: 'text-cyan-400',
+  operator: 'text-ares-dark-300',
+  text: 'text-white',
+};
 
-    // Auto-scroll to bottom on new messages
-    React.useEffect(() => {
-      if (outputRef.current) {
-        outputRef.current.scrollTop = outputRef.current.scrollHeight;
-      }
-    }, [messages]);
+export const highlightSyntax = (input: string): SyntaxToken[] => {
+  const tokens: SyntaxToken[] = [];
+  const regex = /("[^"]*"|'[^']*'|\S+)/g;
+  let match;
 
-    // Focus input on mount
-    React.useEffect(() => {
-      inputRef.current?.focus();
-    }, []);
+  while ((match = regex.exec(input)) !== null) {
+    const token = match[1];
+    let type: SyntaxToken['type'] = 'text';
 
-    const handleSubmit = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!input.trim() || isProcessing) return;
+    if ((token.startsWith('"') && token.endsWith('"')) ||
+        (token.startsWith("'") && token.endsWith("'"))) {
+      type = 'string';
+    }
+    else if (token.startsWith('--') || (token.startsWith('-') && token.length === 2)) {
+      type = 'flag';
+    }
+    else if (/^\d+$/.test(token)) {
+      type = 'number';
+    }
+    else if (COMMAND_KEYWORDS.includes(token.toLowerCase())) {
+      type = 'keyword';
+    }
+    else if (OPERATORS.includes(token.toLowerCase())) {
+      type = 'operator';
+    }
+    else if (/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(token)) {
+      type = 'identifier';
+    }
 
-      // Add to history
-      setHistory(prev => [...prev, input.trim()]);
-      setHistoryIndex(-1);
+    tokens.push({ type, value: token });
+  }
 
-      // Submit command
-      onCommandSubmit?.(input.trim());
-      setInput('');
-    };
+  return tokens;
+};
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      // Command history navigation
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        if (history.length > 0) {
-          const newIndex = historyIndex === -1 
-            ? history.length - 1 
-            : Math.max(0, historyIndex - 1);
-          setHistoryIndex(newIndex);
-          setInput(history[newIndex] || '');
-        }
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        if (historyIndex !== -1) {
-          const newIndex = historyIndex + 1;
-          if (newIndex >= history.length) {
-            setHistoryIndex(-1);
-            setInput('');
-          } else {
-            setHistoryIndex(newIndex);
-            setInput(history[newIndex] || '');
-          }
-        }
-      } else if (e.key === 'Escape') {
-        // Clear input
-        setInput('');
-        setHistoryIndex(-1);
-      } else if (e.key === 'l' && (e.ctrlKey || e.metaKey)) {
-        // Ctrl+L to clear (would need parent component to handle)
-        e.preventDefault();
-      }
-    };
-
-    // Format timestamp
-    const formatTime = (date: Date) => {
-      return date.toLocaleTimeString('en-US', { 
-        hour12: false, 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        second: '2-digit' 
-      });
-    };
+const SyntaxHighlightedInput = React.forwardRef<
+  HTMLInputElement,
+  {
+    value: string;
+    onChange: (value: string) => void;
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+    disabled?: boolean;
+    placeholder?: string;
+  }
+>(
+  ({ value, onChange, onKeyDown, disabled, placeholder }, ref) => {
+    const tokens = highlightSyntax(value);
 
     return (
-      <div
-        ref={ref}
-        className={cn(
-          'flex flex-col h-full bg-ares-dark-950',
-          className
-        )}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-ares-dark-700 bg-ares-dark-900">
-          <div className="flex items-center gap-3">
-            <span className="text-ares-red-500 font-mono font-bold">⚔️ ARES Command Interface</span>
-            <span className="text-xs text-ares-dark-400 bg-ares-dark-800 px-2 py-0.5 rounded">
-              Claude Opus 4.5
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse-status" />
-              <span className="text-xs text-ares-dark-300">Online</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Output Area */}
-        <div
-          ref={outputRef}
-          className="flex-1 overflow-y-auto p-4 font-mono text-sm cli-scrollbar space-y-2"
-        >
-          {messages.length === 0 ? (
-            <div className="text-ares-dark-500 text-center py-8">
-              <div className="mb-2">⚔️ Welcome to ARES Command Interface</div>
-              <div className="text-xs">Type a command or ask ARES for assistance.</div>
-              <div className="text-xs mt-1">Use <span className="text-ares-dark-400">help</span> for available commands.</div>
-            </div>
-          ) : (
-            messages.map((message) => (
-              <div
-                key={message.id}
-                className={cn(
-                  'flex gap-2 animate-fade-in',
-                  messageTypeClasses[message.type]
-                )}
-              >
-                <span className="text-ares-dark-600 flex-shrink-0">
-                  [{formatTime(message.timestamp)}]
-                </span>
-                <div className="flex gap-2">
-                  {message.type !== 'user' && (
-                    <span className="flex-shrink-0">
-                      <MessageIcon type={message.type} />
-                    </span>
-                  )}
-                  {message.agentName && (
-                    <span className="text-orange-500 flex-shrink-0">
-                      [{message.agentName}]
-                    </span>
-                  )}
-                  {message.type === 'user' && (
-                    <CLIPrompt />
-                  )}
-                  <span className="break-all">{message.content}</span>
-                </div>
-              </div>
+      <div className="relative flex-1">
+        <input
+          ref={ref}
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          disabled={disabled}
+          placeholder={placeholder}
+          className={cn(
+            'absolute inset-0 w-full bg-transparent border-none outline-none',
+            'font-mono text-sm text-transparent caret-white',
+            'disabled:opacity-50 z-10'
+          )}
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <div className="font-mono text-sm pointer-events-none whitespace-pre">
+          {tokens.length > 0 ? (
+            tokens.map((token, i) => (
+              <span key={i} className={tokenTypeClasses[token.type]}>
+                {token.value}
+              </span>
             ))
-          )}
-
-          {/* Processing indicator */}
-          {isProcessing && (
-            <div className="flex items-center gap-2 text-ares-dark-400">
-              <span className="text-ares-dark-600">[{formatTime(new Date())}]</span>
-              <span>⚔️</span>
-              <span>Thinking</span>
-              <span className="flex gap-0.5">
-                <span className="typing-dot">.</span>
-                <span className="typing-dot">.</span>
-                <span className="typing-dot">.</span>
-              </span>
-            </div>
+          ) : (
+            <span className="text-ares-dark-500">{placeholder}</span>
           )}
         </div>
-
-        {/* Input Area */}
-        <form
-          onSubmit={handleSubmit}
-          className="border-t border-ares-dark-700 p-3 bg-ares-dark-900"
-        >
-          <div className="flex items-center gap-2">
-            <CLIPrompt />
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Enter command..."
-              disabled={isProcessing}
-              className={cn(
-                'flex-1 bg-transparent border-none outline-none',
-                'font-mono text-sm text-white placeholder:text-ares-dark-500',
-                'disabled:opacity-50'
-              )}
-              autoComplete="off"
-              spellCheck={false}
-            />
-            {input && (
-              <span className="text-xs text-ares-dark-600">
-                ↵ Enter
-              </span>
-            )}
-          </div>
-          <div className="mt-2 flex items-center justify-between text-xs text-ares-dark-500">
-            <div className="flex gap-4">
-              <span>↑↓ History</span>
-              <span>Tab Autocomplete</span>
-              <span>Esc Clear</span>
-            </div>
-            <div>
-              {history.length} commands in history
-            </div>
-          </div>
-        </form>
       </div>
     );
   }
 );
-CLIPanel.displayName = 'CLIPanel';
+SyntaxHighlightedInput.displayName = 'SyntaxHighlightedInput';
 
-export { CLIPanel, type CLIPanelProps, type CLIMessage };
+export function CLIPanel({
+  className,
+  onCommandSubmit,
+  onClearOutput,
+  messages = [],
+  isProcessing = false,
+  height = 200,
+  onHeightChange,
+}: CLIPanelProps) {
+  const [input, setInput] = React.useState('');
+  const [panelHeight, setPanelHeight] = React.useState(height);
+  const [isResizing, setIsResizing] = React.useState(false);
+  const [commandHistory, setCommandHistory] = React.useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = React.useState(-1);
+  const [showAutocomplete, setShowAutocomplete] = React.useState(false);
+  const [autocompleteIndex, setAutocompleteIndex] = React.useState(0);
+  const [filteredSuggestions, setFilteredSuggestions] = React.useState<AutocompleteSuggestion[]>([]);
+  
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const resizeStartY = React.useRef(0);
+  const resizeStartHeight = React.useRef(0);
+
+  // Scroll to bottom when messages change
+  React.useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Handle resize
+  React.useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const deltaY = resizeStartY.current - e.clientY;
+      const newHeight = Math.max(100, Math.min(600, resizeStartHeight.current + deltaY));
+      setPanelHeight(newHeight);
+      onHeightChange?.(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, onHeightChange]);
+
+  // Update height when prop changes
+  React.useEffect(() => {
+    setPanelHeight(height);
+  }, [height]);
+
+  // Filter autocomplete suggestions based on input
+  React.useEffect(() => {
+    if (!input.trim()) {
+      setShowAutocomplete(false);
+      return;
+    }
+
+    const lastWord = input.split(/\s+/).pop() || '';
+    if (lastWord.length < 1) {
+      setShowAutocomplete(false);
+      return;
+    }
+
+    const filtered = AUTOCOMPLETE_SUGGESTIONS.filter(
+      (suggestion) =>
+        suggestion.text.toLowerCase().startsWith(lastWord.toLowerCase())
+    );
+
+    if (filtered.length > 0) {
+      setFilteredSuggestions(filtered);
+      setShowAutocomplete(true);
+      setAutocompleteIndex(0);
+    } else {
+      setShowAutocomplete(false);
+    }
+  }, [input]);
+
+  const handleSubmit = React.useCallback(() => {
+    if (!input.trim() || isProcessing) return;
+
+    const command = input.trim();
+    setCommandHistory((prev) => [...prev, command]);
+    setHistoryIndex(-1);
+    setInput('');
+    setShowAutocomplete(false);
+    onCommandSubmit?.(command);
+  }, [input, isProcessing, onCommandSubmit]);
+
+  const handleKeyDown = React.useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      // Tab autocomplete
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        if (showAutocomplete && filteredSuggestions.length > 0) {
+          const suggestion = filteredSuggestions[autocompleteIndex];
+          const words = input.split(/\s+/);
+          words[words.length - 1] = suggestion.text;
+          setInput(words.join(' ') + ' ');
+          setShowAutocomplete(false);
+        }
+        return;
+      }
+
+      // Escape to clear input
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setInput('');
+        setShowAutocomplete(false);
+        return;
+      }
+
+      // Ctrl+L to clear output
+      if (e.key === 'l' && e.ctrlKey) {
+        e.preventDefault();
+        onClearOutput?.();
+        return;
+      }
+
+      // Up arrow for history
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (showAutocomplete) {
+          setAutocompleteIndex((prev) =>
+            prev > 0 ? prev - 1 : filteredSuggestions.length - 1
+          );
+        } else if (commandHistory.length > 0) {
+          const newIndex = historyIndex + 1;
+          if (newIndex < commandHistory.length) {
+            setHistoryIndex(newIndex);
+            setInput(commandHistory[commandHistory.length - 1 - newIndex]);
+          }
+        }
+        return;
+      }
+
+      // Down arrow for history
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (showAutocomplete) {
+          setAutocompleteIndex((prev) =>
+            prev < filteredSuggestions.length - 1 ? prev + 1 : 0
+          );
+        } else if (historyIndex >= 0) {
+          const newIndex = historyIndex - 1;
+          if (newIndex >= 0) {
+            setHistoryIndex(newIndex);
+            setInput(commandHistory[commandHistory.length - 1 - newIndex]);
+          } else {
+            setHistoryIndex(-1);
+            setInput('');
+          }
+        }
+        return;
+      }
+
+      // Enter to submit
+      if (e.key === 'Enter') {
+        handleSubmit();
+      }
+    },
+    [
+      showAutocomplete,
+      filteredSuggestions,
+      autocompleteIndex,
+      input,
+      commandHistory,
+      historyIndex,
+      handleSubmit,
+      onClearOutput,
+    ]
+  );
+
+  const handleResizeStart = React.useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    resizeStartY.current = e.clientY;
+    resizeStartHeight.current = panelHeight;
+    setIsResizing(true);
+  }, [panelHeight]);
+
+  const formatTimestamp = (date: Date) => {
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      className={cn(
+        'flex flex-col bg-ares-dark-900 border-t border-ares-dark-700',
+        'shadow-cli',
+        className
+      )}
+      style={{ height: panelHeight }}
+    >
+      {/* Resize Handle */}
+      <div
+        className={cn(
+          'h-1 w-full cursor-ns-resize flex items-center justify-center',
+          'hover:bg-ares-red-500/20 transition-colors',
+          isResizing && 'bg-ares-red-500/40'
+        )}
+        onMouseDown={handleResizeStart}
+      >
+        <div className="w-12 h-1 rounded-full bg-ares-dark-600" />
+      </div>
+
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-2 font-mono text-sm">
+        {messages.length === 0 ? (
+          <div className="text-ares-dark-500 text-center py-8">
+            <p className="mb-2">Welcome to ARES CLI</p>
+            <p className="text-xs text-ares-dark-400">
+              Type a command or press <kbd className="px-1 py-0.5 bg-ares-dark-750 rounded">Tab</kbd> for autocomplete
+            </p>
+            <p className="text-xs text-ares-dark-400 mt-1">
+              <kbd className="px-1 py-0.5 bg-ares-dark-750 rounded">Ctrl+L</kbd> to clear ·
+              <kbd className="px-1 py-0.5 bg-ares-dark-750 rounded ml-1">Esc</kbd> to clear input ·
+              <kbd className="px-1 py-0.5 bg-ares-dark-750 rounded ml-1">↑↓</kbd> for history
+            </p>
+          </div>
+        ) : (
+          messages.map((message) => (
+            <div
+              key={message.id}
+              className={cn(
+                'flex gap-2 animate-fade-in',
+                message.type === 'user' && 'ml-4'
+              )}
+            >
+              <span className="text-ares-dark-500 text-xs shrink-0 pt-0.5">
+                {formatTimestamp(message.timestamp)}
+              </span>
+              <span className="shrink-0">
+                <MessageIcon type={message.type} />
+              </span>
+              {message.type === 'user' ? (
+                <span className="text-ares-red-300">
+                  <CLIPrompt /> {message.content}
+                </span>
+              ) : message.type === 'agent' && message.agentName ? (
+                <div className="flex flex-col">
+                  <span className="text-orange-500 text-xs">[{message.agentName}]</span>
+                  <span className={messageTypeClasses[message.type]}>
+                    {message.content}
+                  </span>
+                </div>
+              ) : (
+                <span className={messageTypeClasses[message.type]}>
+                  {message.content}
+                </span>
+              )}
+            </div>
+          ))
+        )}
+        {isProcessing && (
+          <div className="flex gap-2 items-center text-ares-dark-400">
+            <span className="text-ares-dark-500 text-xs">
+              {formatTimestamp(new Date())}
+            </span>
+            <span className="animate-pulse">⚔️ Processing...</span>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input Area */}
+      <div className="border-t border-ares-dark-700 p-3 bg-ares-dark-850">
+        <div className="relative">
+          <div className="flex items-center gap-2">
+            <CLIPrompt />
+            <SyntaxHighlightedInput
+              ref={inputRef}
+              value={input}
+              onChange={setInput}
+              onKeyDown={handleKeyDown}
+              disabled={isProcessing}
+              placeholder="Enter command..."
+            />
+          </div>
+
+          {/* Autocomplete Dropdown */}
+          {showAutocomplete && filteredSuggestions.length > 0 && (
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-ares-dark-800 border border-ares-dark-700 rounded-md shadow-lg overflow-hidden z-50">
+              {filteredSuggestions.map((suggestion, index) => (
+                <button
+                  key={suggestion.text}
+                  className={cn(
+                    'w-full px-3 py-2 text-left text-sm flex items-center gap-2',
+                    'hover:bg-ares-dark-700 transition-colors',
+                    index === autocompleteIndex && 'bg-ares-dark-750'
+                  )}
+                  onClick={() => {
+                    const words = input.split(/\s+/);
+                    words[words.length - 1] = suggestion.text;
+                    setInput(words.join(' ') + ' ');
+                    setShowAutocomplete(false);
+                    inputRef.current?.focus();
+                  }}
+                >
+                  <span
+                    className={cn(
+                      'text-xs px-1.5 py-0.5 rounded',
+                      suggestion.type === 'command' && 'bg-purple-500/20 text-purple-400',
+                      suggestion.type === 'argument' && 'bg-cyan-500/20 text-cyan-400',
+                      suggestion.type === 'flag' && 'bg-yellow-500/20 text-yellow-400'
+                    )}
+                  >
+                    {suggestion.type}
+                  </span>
+                  <span className="font-mono text-white">{suggestion.text}</span>
+                  <span className="text-ares-dark-400 text-xs ml-auto">
+                    {suggestion.description}
+                  </span>
+                </button>
+              ))}
+              <div className="px-3 py-1 bg-ares-dark-900 text-xs text-ares-dark-500 border-t border-ares-dark-700">
+                Press <kbd className="px-1 bg-ares-dark-750 rounded">Tab</kbd> to accept ·
+                <kbd className="px-1 bg-ares-dark-750 rounded ml-1">↑↓</kbd> to navigate
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Keyboard Shortcuts Hint */}
+        <div className="flex items-center justify-between mt-2 text-xs text-ares-dark-500">
+          <div className="flex gap-3">
+            <span className="flex items-center gap-1">
+              <kbd className="px-1.5 py-0.5 bg-ares-dark-750 rounded text-ares-dark-300">Tab</kbd>
+              <span>autocomplete</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <kbd className="px-1.5 py-0.5 bg-ares-dark-750 rounded text-ares-dark-300">↑↓</kbd>
+              <span>history</span>
+            </span>
+          </div>
+          <div className="flex gap-3">
+            <span className="flex items-center gap-1">
+              <kbd className="px-1.5 py-0.5 bg-ares-dark-750 rounded text-ares-dark-300">Ctrl+L</kbd>
+              <span>clear</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <kbd className="px-1.5 py-0.5 bg-ares-dark-750 rounded text-ares-dark-300">Esc</kbd>
+              <span>clear input</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default CLIPanel;
