@@ -167,6 +167,18 @@ module.exports = {
             boxShadow: '0 0 0 12px rgba(220, 38, 38, 0)'
           },
         },
+        'pulse-dot': {
+          '0%, 100%': { 
+            opacity: '1',
+            transform: 'scale(1)',
+            boxShadow: '0 0 0 0px rgba(255, 255, 255, 0.4)'
+          },
+          '50%': { 
+            opacity: '0.8',
+            transform: 'scale(1.15)',
+            boxShadow: '0 0 0 6px rgba(255, 255, 255, 0)'
+          },
+        },
         'blink': {
           '0%, 50%': { opacity: '1' },
           '51%, 100%': { opacity: '0' },
@@ -186,14 +198,18 @@ module.exports = {
         'fade-in': 'fade-in 0.2s ease-out',
         'pulse-status': 'pulse-status 2s ease-in-out infinite',
         'pulse-busy': 'pulse-busy 1.5s ease-in-out infinite',
-        'pulse-critical': 'pulse-critical 1s ease-in-out infinite',
-        'blink': 'blink 1s step-end infinite',
-        'typing': 'typing 1.4s infinite',
+         'pulse-critical': 'pulse-critical 1s ease-in-out infinite',
+         'pulse-dot': 'pulse-dot 2s ease-in-out infinite',
+         'blink': 'blink 1s step-end infinite',
+         'typing': 'typing 1.4s infinite',
    		},
       boxShadow: {
         'glow-red': '0 0 20px rgba(220, 38, 38, 0.4)',
         'glow-red-sm': '0 0 10px rgba(220, 38, 38, 0.3)',
         'glow-red-lg': '0 0 30px rgba(220, 38, 38, 0.5)',
+        'glow-green': '0 0 12px rgba(34, 197, 94, 0.5)',
+        'glow-yellow': '0 0 12px rgba(250, 204, 21, 0.5)',
+        'glow-orange': '0 0 12px rgba(249, 115, 22, 0.5)',
         'glow-cyan': '0 0 20px rgba(6, 182, 212, 0.4)',
         'cli': '0 -4px 20px rgba(220, 38, 38, 0.3)',
         'card': '0 4px 12px rgba(0, 0, 0, 0.3)',

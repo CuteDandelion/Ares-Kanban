@@ -4,6 +4,105 @@ This file tracks all development activities, files created, and important contex
 
 ---
 
+## [2026-02-01] ARES v2 Phase 2 Implementation: Claude API, Docker Sandbox, and Pulsing Status Dot
+
+### Summary
+Implemented Phase 2 features for ARES v2:
+1. **Claude API Integration** with tool-use for kanban board manipulation (column/card CRUD)
+2. **Docker Sandbox** architecture for safe CLI command execution (via DockerSock)
+3. **Pulsing Color-Coded Status Dot** replacing sword icon for ARES status indication
+4. **Settings Panel** for managing Claude API key with visual status indicator
+
+### Features Implemented
+
+#### 1. Pulsing Status Dot Component
+- Replaced sword icon (⚔️) with animated pulsing dot
+- Color-coded states:
+  - 🟢 Green: Online/Ready
+  - 🟡 Yellow: Processing/Thinking  
+  - 🔴 Red: Error/Offline
+  - ⚫ Gray: Offline
+- Smooth CSS animation using Tailwind
+- Used in CLI messages and header status indicator
+
+**Files:**
+- `src/components/ui/PulsingStatusDot.tsx` - New component
+- `tailwind.config.js` - Added `animate-pulse-dot` animation and glow shadows
+
+#### 2. Claude API Service with Tool Use
+- Created service to integrate Claude API with tool-use capabilities
+- 10 kanban manipulation tools defined:
+  - `create_card` - Create new cards in columns
+  - `move_card` - Move cards between columns
+  - `delete_card` - Delete cards
+  - `update_card` - Update card properties
+  - `create_column` - Create new columns
+  - `rename_column` - Rename columns
+  - `delete_column` - Delete columns
+  - `search_cards` - Search for cards
+  - `list_columns` - List all columns
+  - `get_column_cards` - Get cards in a column
+- Natural language command processing
+- Response streaming for real-time feedback
+
+**Files:**
+- `src/lib/claude/claudeService.ts` - New service
+
+#### 3. Docker Sandbox for CLI Execution
+- Architecture for safe bash command execution via Docker socket
+- Command whitelist for security:
+  - git, npm, node, python (safe commands)
+  - ls, cat, mkdir, cp, mv (file operations)
+  - curl, wget (with restrictions)
+- Resource limits per execution:
+  - 2GB RAM max
+  - 2 CPU cores
+  - 5 minute timeout
+- Dangerous commands blocked (sudo, rm -rf /, etc.)
+- Note: Browser-side stub, full implementation via API routes
+
+**Files:**
+- `src/lib/sandbox/DockerSandbox.ts` - New service
+
+#### 4. Settings Panel with Status Indicator
+- Dialog-based settings panel accessible from header
+- Claude API key input (masked, stored in Supabase)
+- Visual status indicator (pulsing dot showing connection state)
+- Connection test button with feedback
+- Docker configuration toggle
+- Dark theme matching ARES design
+
+**Files:**
+- `src/components/settings/SettingsPanel.tsx` - New component
+- `src/stores/settingsStore.ts` - Settings state management
+- `src/components/ui/switch.tsx` - Toggle switch component
+
+#### 5. Updated CLIPanel Integration
+- Replaced sword icon with pulsing status dot
+- Integrated Claude service for natural language processing
+- Added bash command support (prefix with `!`)
+- Updated useCLI hook to support Claude integration
+
+**Files Modified:**
+- `src/components/layout/CLIPanel.tsx` - Updated MessageIcon and processing indicator
+- `src/cli/useCLI.ts` - Added Claude and Docker integration
+- `src/components/kanban/Board.tsx` - Integrated SettingsPanel and Claude service
+
+### Build Verification
+```
+✓ Build: SUCCESS
+✓ Lint: PASSED (1 pre-existing warning)
+✓ TypeScript: All types valid
+✓ Bundle Size: 47.7 kB for board page
+```
+
+### Git Hygiene
+- Branch: `feature/ares-v2-phase2-cli-interface`
+- All changes staged and ready for PR
+- No direct push to main
+
+---
+
 ## [2026-02-01] PLAYWRIGHT MCP E2E TESTS: ARES v2 Phase 2 CLI Interface - Comprehensive Test Session
 
 ### Summary

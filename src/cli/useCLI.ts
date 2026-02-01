@@ -2,7 +2,7 @@
  * ARES CLI Hook
  * 
  * Provides a React hook for managing CLI state and command execution.
- * Integrates with the command parser and handles command processing.
+ * Integrates with Claude API for natural language command processing.
  */
 
 import { useState, useCallback, useRef } from 'react';
@@ -13,10 +13,14 @@ import {
   generateHelpText, 
   ParsedCommand 
 } from '@/cli/commandParser';
+import ClaudeService from '@/lib/claude/claudeService';
+import { dockerSandbox } from '@/lib/sandbox/DockerSandbox';
 
 export interface UseCLIProps {
   onCommand?: (command: ParsedCommand) => Promise<void> | void;
   maxHistory?: number;
+  claudeService?: ClaudeService;
+  claudeEnabled?: boolean;
 }
 
 export interface UseCLIReturn {
@@ -35,7 +39,12 @@ const generateId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(
 /**
  * React hook for managing CLI state and command execution
  */
-export const useCLI = ({ onCommand, maxHistory = 100 }: UseCLIProps = {}): UseCLIReturn => {
+export const useCLI = ({ 
+  onCommand, 
+  maxHistory = 100,
+  claudeService,
+  claudeEnabled = false
+}: UseCLIProps = {}): UseCLIReturn => {
   const [messages, setMessages] = useState<CLIMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [cliHeight, setCLIHeight] = useState(300);
@@ -87,7 +96,67 @@ export const useCLI = ({ onCommand, maxHistory = 100 }: UseCLIProps = {}): UseCL
         content: commandText,
       });
 
-      // Parse the command
+      // Check if this is a bash/command execution
+      if (commandText.startsWith('!')) {
+        const bashCommand = commandText.slice(1).trim();
+        addMessage({
+          type: 'system',
+          content: `Executing: ${bashCommand}`,
+        });
+        
+        try {
+          const result = await dockerSandbox.executeCommand('cli', bashCommand.split(' '), { timeout: 60000 });
+          if (result.success) {
+            addMessage({
+              type: 'success',
+              content: result.stdout || 'Command executed successfully',
+            });
+          } else {
+            addMessage({
+              type: 'error',
+              content: result.stderr || 'Command failed',
+            });
+          }
+        } catch (error) {
+          addMessage({
+            type: 'error',
+            content: error instanceof Error ? error.message : 'Command execution failed',
+          });
+        }
+        return;
+      }
+
+      // Use Claude if enabled
+      if (claudeEnabled && claudeService) {
+        try {
+          const response = await claudeService.sendMessage(commandText);
+          
+          addMessage({
+            type: 'ares',
+            content: response.text,
+          });
+
+          // Execute any tool calls
+          if (response.toolCalls && response.toolCalls.length > 0) {
+            const results = await claudeService.executeTools(response.toolCalls);
+            
+            for (const result of results) {
+              addMessage({
+                type: result.success ? 'success' : 'error',
+                content: `${result.name}: ${result.success ? 'Success' : 'Failed'} - ${JSON.stringify(result.result)}`,
+              });
+            }
+          }
+        } catch (error) {
+          addMessage({
+            type: 'error',
+            content: error instanceof Error ? error.message : 'Claude processing failed',
+          });
+        }
+        return;
+      }
+
+      // Parse the command (legacy mode without Claude)
       const parsed = parseCommand(commandText);
 
       // Validate the command
@@ -133,18 +202,9 @@ export const useCLI = ({ onCommand, maxHistory = 100 }: UseCLIProps = {}): UseCL
               });
             }
           } else {
-            // No handler provided - acknowledge receipt
             addMessage({
               type: 'ares',
-              content: `⚔️ Mission accepted. Processing "${parsed.type} ${parsed.target || ''}" command...`,
-            });
-
-            // Simulate processing delay
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            addMessage({
-              type: 'success',
-              content: `Command "${parsed.type}" executed successfully.`,
+              content: `Command "${parsed.type}" acknowledged. Configure Claude API for intelligent processing.`,
             });
           }
           break;
@@ -158,7 +218,7 @@ export const useCLI = ({ onCommand, maxHistory = 100 }: UseCLIProps = {}): UseCL
       processingRef.current = false;
       setIsProcessing(false);
     }
-  }, [addMessage, handleClearOutput, onCommand]);
+  }, [addMessage, handleClearOutput, onCommand, claudeService, claudeEnabled]);
 
   /**
    * Handle command submission
