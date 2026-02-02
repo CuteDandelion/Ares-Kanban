@@ -72,7 +72,7 @@ export function Board({ boardId }: BoardProps) {
   } = useKanbanStore();
 
   // Settings
-  const { claudeEnabled, claudeConnectionStatus, claudeApiKey } = useSettingsStore();
+  const { claudeEnabled, claudeConnectionStatus, claudeApiKey, claudeModel } = useSettingsStore();
 
   const [activeCard, setActiveCard] = useState<CardType | null>(null);
   const [activeColumn, setActiveColumn] = useState<ColumnWithCards | null>(null);
@@ -97,13 +97,17 @@ export function Board({ boardId }: BoardProps) {
   const claudeServiceRef = React.useRef<ClaudeService | null>(null);
   
   React.useEffect(() => {
-    if (claudeApiKey && !claudeServiceRef.current) {
-      claudeServiceRef.current = new ClaudeService({ apiKey: claudeApiKey });
+    if (claudeApiKey && claudeModel) {
+      // Create or update Claude service when API key or model changes
+      claudeServiceRef.current = new ClaudeService({ 
+        apiKey: claudeApiKey,
+        model: claudeModel,
+      });
       // Set the store for the Claude service
       const store = useKanbanStore.getState();
       claudeServiceRef.current.setStore(() => useKanbanStore.getState());
     }
-  }, [claudeApiKey]);
+  }, [claudeApiKey, claudeModel]);
   
   const { messages, isProcessing, cliHeight, setCLIHeight, handleCommandSubmit, handleClearOutput } = useCLI({
     claudeService: claudeServiceRef.current || undefined,

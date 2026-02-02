@@ -2,7 +2,8 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { useSettingsStore, AnthropicModel } from '@/stores/settingsStore';
+import { useToast } from '@/hooks/use-toast';
 import { PulsingStatusDot } from '@/components/ui/PulsingStatusDot';
 import {
   Dialog,
@@ -15,7 +16,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Settings, Key, TestTube, Check, X } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Settings, Key, TestTube, Check, X, Sparkles, Loader2, RefreshCw } from 'lucide-react';
 
 export interface SettingsPanelProps {
   className?: string;
@@ -24,29 +32,58 @@ export interface SettingsPanelProps {
 export function SettingsPanel({ className }: SettingsPanelProps) {
   const {
     claudeApiKey,
+    claudeModel,
     claudeEnabled,
     dockerEnabled,
+    availableModels,
+    isLoadingModels,
+    modelsError,
     isSettingsOpen,
     claudeConnectionStatus,
     openSettings,
     closeSettings,
     setClaudeApiKey,
+    setClaudeModel,
     setDockerEnabled,
     testClaudeConnection,
+    fetchAvailableModels,
     saveSettingsToSupabase,
   } = useSettingsStore();
 
+  const { toast } = useToast();
+
   const [tempApiKey, setTempApiKey] = React.useState(claudeApiKey || '');
+  const [tempModel, setTempModel] = React.useState(claudeModel);
   const [isTesting, setIsTesting] = React.useState(false);
   const [testResult, setTestResult] = React.useState<{ success: boolean; message?: string } | null>(null);
+  const [isSaving, setIsSaving] = React.useState(false);
 
-  // Sync temp key with store when dialog opens
+  // Sync temp values with store when dialog opens
   React.useEffect(() => {
     if (isSettingsOpen) {
       setTempApiKey(claudeApiKey || '');
+      setTempModel(claudeModel);
       setTestResult(null);
+      
+      // Fetch models if we have an API key
+      if (claudeApiKey) {
+        fetchAvailableModels(claudeApiKey);
+      }
     }
-  }, [isSettingsOpen, claudeApiKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSettingsOpen, claudeApiKey, claudeModel]);
+
+  // Fetch models when API key changes (debounced)
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (tempApiKey.trim() && tempApiKey !== claudeApiKey) {
+        fetchAvailableModels(tempApiKey);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tempApiKey]);
 
   const handleTestConnection = async () => {
     if (!tempApiKey.trim()) {
@@ -57,7 +94,7 @@ export function SettingsPanel({ className }: SettingsPanelProps) {
     setIsTesting(true);
     setTestResult(null);
 
-    // Temporarily set the key for testing
+    // Temporarily set the key and model for testing
     setClaudeApiKey(tempApiKey);
 
     const result = await testClaudeConnection();
@@ -69,10 +106,55 @@ export function SettingsPanel({ className }: SettingsPanelProps) {
     });
   };
 
+  const handleRefreshModels = async () => {
+    if (!tempApiKey.trim()) {
+      toast({
+        title: 'API Key Required',
+        description: 'Please enter an API key to fetch available models.',
+      });
+      return;
+    }
+    
+    const result = await fetchAvailableModels(tempApiKey);
+    
+    if (result.success) {
+      toast({
+        title: 'Models Updated',
+        description: `Found ${availableModels.length} available models.`,
+      });
+    } else {
+      toast({
+        title: 'Failed to Fetch Models',
+        description: result.error || 'Could not retrieve models from Anthropic.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleSave = async () => {
-    setClaudeApiKey(tempApiKey.trim() || null);
-    await saveSettingsToSupabase();
-    closeSettings();
+    setIsSaving(true);
+    
+    try {
+      setClaudeApiKey(tempApiKey.trim() || null);
+      setClaudeModel(tempModel);
+      await saveSettingsToSupabase();
+      
+      // Show success toast
+      toast({
+        title: 'Settings saved',
+        description: 'Your ARES configuration has been successfully saved.',
+      });
+      
+      closeSettings();
+    } catch (error) {
+      toast({
+        title: 'Error saving settings',
+        description: 'There was a problem saving your settings. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getConnectionDotState = (): import('@/components/ui/PulsingStatusDot').StatusState => {
@@ -86,6 +168,10 @@ export function SettingsPanel({ className }: SettingsPanelProps) {
       default:
         return 'offline';
     }
+  };
+
+  const formatModelLabel = (model: AnthropicModel) => {
+    return model.display_name || model.id;
   };
 
   return (
@@ -140,6 +226,77 @@ export function SettingsPanel({ className }: SettingsPanelProps) {
               <p className="text-xs text-ares-dark-500">
                 Your API key is stored securely in Supabase and never exposed client-side.
               </p>
+            </div>
+
+            {/* Model Selection Dropdown */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="model-select" className="text-ares-dark-300 flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Anthropic Model
+                </Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRefreshModels}
+                  disabled={isLoadingModels || !tempApiKey.trim()}
+                  className="h-6 px-2 text-xs text-ares-dark-400 hover:text-white"
+                >
+                  {isLoadingModels ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3" />
+                  )}
+                  Refresh
+                </Button>
+              </div>
+              
+              <Select
+                value={tempModel}
+                onValueChange={setTempModel}
+                disabled={isLoadingModels || availableModels.length === 0}
+              >
+                <SelectTrigger id="model-select" className="w-full">
+                  {isLoadingModels ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-ares-dark-400">Loading models...</span>
+                    </div>
+                  ) : availableModels.length === 0 ? (
+                    <span className="text-ares-dark-500">
+                      {tempApiKey.trim() ? 'Enter API key to see models' : 'No models available'}
+                    </span>
+                  ) : (
+                    <SelectValue placeholder="Select a model" />
+                  )}
+                </SelectTrigger>
+                <SelectContent className="bg-ares-dark-800 border-ares-dark-700 max-h-[300px]">
+                  {availableModels.map((model) => (
+                    <SelectItem
+                      key={model.id}
+                      value={model.id}
+                      className="text-white focus:bg-ares-dark-700 focus:text-white"
+                    >
+                      <div className="flex flex-col py-1">
+                        <span className="font-medium">{formatModelLabel(model)}</span>
+                        <span className="text-xs text-ares-dark-400 font-mono">{model.id}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {modelsError && (
+                <p className="text-xs text-red-400">
+                  Error: {modelsError}
+                </p>
+              )}
+              
+              {availableModels.length > 0 && !modelsError && (
+                <p className="text-xs text-ares-dark-500">
+                  {availableModels.length} models available • Selected: <span className="text-ares-dark-300 font-mono">{tempModel}</span>
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-4">
@@ -232,15 +389,24 @@ export function SettingsPanel({ className }: SettingsPanelProps) {
             <Button
               variant="outline"
               onClick={closeSettings}
+              disabled={isSaving}
               className="border-ares-dark-600 hover:bg-ares-dark-800"
             >
               Cancel
             </Button>
             <Button
               onClick={handleSave}
+              disabled={isSaving}
               className="bg-ares-red-600 hover:bg-ares-red-700 text-white"
             >
-              Save Settings
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Settings'
+              )}
             </Button>
           </div>
         </div>
