@@ -1,17 +1,28 @@
 /**
  * Settings Store
- * Manages Claude API key and Docker configuration
+ * Manages Claude API key, model selection, and Docker configuration
  */
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase } from '@/lib/supabase';
 
+export interface AnthropicModel {
+  id: string;
+  display_name: string;
+  created_at: string;
+}
+
 export interface SettingsState {
   // Claude API Configuration
   claudeApiKey: string | null;
   claudeModel: string;
   claudeEnabled: boolean;
+  
+  // Available Models
+  availableModels: AnthropicModel[];
+  isLoadingModels: boolean;
+  modelsError: string | null;
   
   // Docker Configuration
   dockerEnabled: boolean;
@@ -31,6 +42,7 @@ export interface SettingsState {
   closeSettings: () => void;
   setClaudeConnectionStatus: (status: SettingsState['claudeConnectionStatus']) => void;
   testClaudeConnection: () => Promise<{ success: boolean; error?: string }>;
+  fetchAvailableModels: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   loadSettingsFromSupabase: () => Promise<void>;
   saveSettingsToSupabase: () => Promise<void>;
 }
@@ -42,6 +54,9 @@ export const useSettingsStore = create<SettingsState>()(
       claudeApiKey: null,
       claudeModel: 'claude-3-5-sonnet-20241022',
       claudeEnabled: false,
+      availableModels: [],
+      isLoadingModels: false,
+      modelsError: null,
       dockerEnabled: true,
       dockerSocketPath: '/var/run/docker.sock',
       isSettingsOpen: false,
@@ -95,6 +110,52 @@ export const useSettingsStore = create<SettingsState>()(
             success: false, 
             error: error instanceof Error ? error.message : 'Connection failed - CORS issue or network error' 
           };
+        }
+      },
+
+      fetchAvailableModels: async (apiKey: string) => {
+        if (!apiKey.trim()) {
+          set({ availableModels: [], modelsError: null });
+          return { success: false, error: 'API key is required' };
+        }
+
+        set({ isLoadingModels: true, modelsError: null });
+
+        try {
+          const response = await fetch('/api/models', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ apiKey }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok && data.models) {
+            set({ 
+              availableModels: data.models, 
+              isLoadingModels: false,
+              modelsError: null 
+            });
+            return { success: true };
+          } else {
+            const errorMessage = data.error || 'Failed to fetch models';
+            set({ 
+              availableModels: [], 
+              isLoadingModels: false,
+              modelsError: errorMessage 
+            });
+            return { success: false, error: errorMessage };
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Network error';
+          set({ 
+            availableModels: [], 
+            isLoadingModels: false,
+            modelsError: errorMessage 
+          });
+          return { success: false, error: errorMessage };
         }
       },
 
@@ -161,8 +222,8 @@ export const useSettingsStore = create<SettingsState>()(
         claudeModel: state.claudeModel,
         dockerEnabled: state.dockerEnabled,
         dockerSocketPath: state.dockerSocketPath,
-        // Note: claudeApiKey is NOT persisted to localStorage for security
-        // It's stored in Supabase only
+        // Note: claudeApiKey and availableModels are NOT persisted to localStorage
+        // API key is stored in Supabase only, models are fetched dynamically
       }),
     }
   )
