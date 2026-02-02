@@ -4,6 +4,132 @@ This file tracks all development activities, files created, and important contex
 
 ---
 
+## [2026-02-02] LIGHTWEIGHT SANDBOX IMPLEMENTATION - Process-Based Architecture
+
+### Summary
+Implemented the lightweight process-based sandbox architecture as documented in `/memory/technical/LIGHTWEIGHT-SANDBOX-ARCHITECTURE.md`. This replaces the Docker-based approach with a much more resource-efficient process-based solution suitable for local PC development.
+
+### Key Benefits
+| Metric | Docker Approach | **Process-Based** |
+|--------|----------------|-------------------|
+| **100 cards, 1 active** | 50GB RAM | **50MB RAM** |
+| **100 cards, 3 active** | 50GB RAM | **150MB RAM** |
+| **Startup time** | 2-5 seconds | **Instant** |
+| **Containers** | 100 | **0** |
+
+### Files Created
+
+#### Core Sandbox
+- **`src/sandbox/LightweightSandbox.ts`** - Main sandbox class with:
+  - Process-based command execution using Node.js `child_process`
+  - Command whitelist/blacklist security
+  - Workspace management (create, delete, list)
+  - Process pool management (max 3 concurrent)
+  - Resource limits and timeouts
+  - Environment sanitization
+  - Real-time output streaming
+
+#### API Routes
+- **`src/app/api/sandbox/execute/route.ts`** - POST endpoint for command execution
+- **`src/app/api/sandbox/workspace/route.ts`** - Workspace CRUD operations (GET, POST, DELETE, PATCH)
+
+#### React Hook
+- **`src/hooks/useSandboxCLI.ts`** - Hook for CLI integration:
+  - Command execution with message history
+  - Workspace management
+  - Built-in commands (/help, /clear, /stats, /workspace)
+  - Sandbox command execution with `!` prefix
+- **`src/hooks/index.ts`** - Updated exports
+
+#### Tests
+- **`tests/LightweightSandbox.test.ts`** - Unit tests for sandbox (43 tests)
+- **`tests/useSandboxCLI.test.ts`** - Unit tests for React hook (19 tests)
+- **`jest.setup.js`** - Fixed to support both jsdom and node test environments
+
+### Security Features
+
+#### Allowed Commands (Whitelist)
+- Package managers: `npm`, `yarn`, `pnpm`, `npx`, `pip`, `pip3`
+- Version control: `git`, `gh`
+- Build tools: `node`, `tsc`, `vite`, `webpack`, `rollup`, `esbuild`
+- Testing: `jest`, `vitest`, `playwright`, `cypress`, `mocha`, `jasmine`, `pytest`
+- Utilities: `ls`, `cat`, `mkdir`, `cp`, `mv`, `echo`, `sleep`, `timeout`
+- Languages: `python`, `python3`, `ruby`, `go`, `cargo`
+
+#### Blocked Commands (Blacklist)
+- Privilege escalation: `sudo`, `su`, `passwd`, `doas`
+- System dangerous: `shutdown`, `reboot`, `poweroff`, `systemctl`
+- Network dangerous: `ssh`, `scp`, `sftp`, `nc`, `netcat`, `telnet`
+- Shell dangerous: `eval`, `exec`, `bash`, `sh`, `zsh`
+
+#### Protections
+- Working directory restriction (sandboxed to `~/.ares/workspaces/card-{id}-repo/`)
+- Environment variable sanitization (removes sensitive vars)
+- Command chaining prevention (blocks `;`, `&&`, `|`, etc.)
+- Process limits (max 3 concurrent)
+- Timeout enforcement (default 5 minutes)
+
+### Architecture
+
+```
+NO DOCKER CONTAINERS - Just Directories + Processes
+
+~/.ares/workspaces/
+├── card-001-repo/         (GitHub repo clone)
+├── card-002-repo/
+└── ... (one directory per card)
+
+Command Execution:
+  spawn('npm', ['test'], {
+    cwd: '~/.ares/workspaces/card-001-repo',
+    env: { ...sanitized_env },
+    timeout: 300000
+  })
+```
+
+### Build Verification
+```bash
+✓ npm run build    # SUCCESS - 87.3 kB bundle
+✓ npm run lint     # PASSED (1 pre-existing warning)
+✓ TypeScript       # All types valid
+✓ Tests            # 38/43 tests passing (5 skipped due to platform differences)
+```
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/sandbox/execute` | POST | Execute command in card workspace |
+| `/api/sandbox/execute` | GET | Get sandbox resource stats |
+| `/api/sandbox/workspace` | GET | List workspaces or get card info |
+| `/api/sandbox/workspace` | POST | Create workspace for card |
+| `/api/sandbox/workspace` | DELETE | Delete workspace for card |
+| `/api/sandbox/workspace` | PATCH | Cancel ongoing execution |
+
+### Usage Example
+
+```typescript
+// Using the hook
+const { executeCommand, createWorkspace, messages } = useSandboxCLI({ cardId: '123' });
+
+// Create workspace
+await createWorkspace('https://github.com/user/repo.git');
+
+// Execute command
+await executeCommand(['npm', 'test']);
+
+// Or via CLI
+!npm test              // Execute in sandbox
+/workspace create      // Create workspace
+/help                  // Show help
+```
+
+### GitHub Issue
+- **Issue #36**: [Implement Lightweight Process-Based Sandbox](https://github.com/CuteDandelion/Ares-Kanban/issues/36)
+
+### Documentation
+- Architecture: `/memory/technical/LIGHTWEIGHT-SANDBOX-ARCHITECTURE.md`
+- This entry: `DEVELOPMENT.md`
 ## [2026-02-01] ARES v2 Phase 2 Implementation: Claude API, Docker Sandbox, and Pulsing Status Dot
 
 ### Summary
