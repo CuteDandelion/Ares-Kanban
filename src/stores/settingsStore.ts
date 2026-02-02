@@ -66,14 +66,14 @@ export const useSettingsStore = create<SettingsState>()(
         set({ claudeConnectionStatus: 'testing' });
 
         try {
-          const response = await fetch('https://api.anthropic.com/v1/messages', {
+          // Use the proxy API route to avoid CORS issues
+          const response = await fetch('/api/claude', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'x-api-key': claudeApiKey,
-              'anthropic-version': '2023-06-01',
             },
             body: JSON.stringify({
+              apiKey: claudeApiKey,
               model: get().claudeModel,
               max_tokens: 10,
               messages: [{ role: 'user', content: 'Hi' }],
@@ -84,15 +84,16 @@ export const useSettingsStore = create<SettingsState>()(
             set({ claudeConnectionStatus: 'connected' });
             return { success: true };
           } else {
-            const error = await response.text();
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.error || errorData.details?.error?.message || 'Connection failed';
             set({ claudeConnectionStatus: 'error' });
-            return { success: false, error };
+            return { success: false, error: errorMessage };
           }
         } catch (error) {
           set({ claudeConnectionStatus: 'error' });
           return { 
             success: false, 
-            error: error instanceof Error ? error.message : 'Connection failed' 
+            error: error instanceof Error ? error.message : 'Connection failed - CORS issue or network error' 
           };
         }
       },

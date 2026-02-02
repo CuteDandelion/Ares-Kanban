@@ -4,6 +4,82 @@ This file tracks all development activities, files created, and important contex
 
 ---
 
+## [2026-02-02] FIX: Claude API "Failed to fetch" Error - CORS Proxy Implementation
+
+### Problem
+The Claude API connection test in the ARES Settings dialog was failing with "Failed to fetch" error. The test button showed "Connection failed" and the error banner displayed "× Failed to fetch".
+
+### Root Cause
+The frontend code was making **direct browser requests** to `https://api.anthropic.com/v1/messages`, which fails due to:
+
+1. **CORS (Cross-Origin Resource Sharing)**: Browsers block direct cross-origin requests to external APIs without proper CORS headers from the server
+2. **Security Risk**: API keys were being sent directly from the browser, exposing them in client-side code
+3. **Claude API CORS Policy**: Anthropic's API does not enable CORS for browser-based requests from arbitrary origins
+
+**Before (Broken):**
+```typescript
+// settingsStore.ts - This runs IN THE BROWSER (gets blocked)
+const response = await fetch('https://api.anthropic.com/v1/messages', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-api-key': claudeApiKey,  // API key exposed!
+    'anthropic-version': '2023-06-01',
+  },
+  body: JSON.stringify({...}),
+});
+```
+
+### Solution
+Created a **Next.js API route proxy** that acts as a middleman:
+
+```
+Browser → /api/claude (Next.js route) → api.anthropic.com → Response back
+```
+
+This pattern:
+- ✅ Avoids CORS issues (same-origin request from browser)
+- ✅ Protects API key (server-to-server communication)
+- ✅ Proper error handling and logging
+
+### Files Created
+- **`src/app/api/claude/route.ts`** - Proxy API route that:
+  - Accepts API key, model, messages from frontend
+  - Makes server-side request to Claude API
+  - Returns Claude's response to frontend
+  - Handles errors gracefully
+
+### Files Modified
+- **`src/stores/settingsStore.ts`** - Updated `testClaudeConnection()` to call `/api/claude` instead of direct API
+- **`src/lib/claude/claudeService.ts`** - Updated `sendMessage()` and `testConnection()` to use proxy
+
+### Build Verification
+```bash
+✓ npm run build    # SUCCESS - 87.3 kB bundle
+✓ npm run lint     # PASSED
+✓ TypeScript       # All types valid
+```
+
+### API Endpoint
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/claude` | POST | Proxy requests to Claude API |
+
+**Request Body:**
+```json
+{
+  "apiKey": "sk-ant-...",
+  "model": "claude-3-5-sonnet-20241022",
+  "max_tokens": 10,
+  "messages": [{"role": "user", "content": "Hi"}],
+  "temperature": 0.7,  // optional
+  "system": "...",     // optional
+  "tools": [...]       // optional
+}
+```
+
+---
+
 ## [2026-02-02] LIGHTWEIGHT SANDBOX IMPLEMENTATION - Process-Based Architecture
 
 ### Summary

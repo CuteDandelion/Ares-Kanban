@@ -189,14 +189,14 @@ class ClaudeService {
     const systemPrompt = this.buildSystemPrompt(context);
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      // Use the proxy API route to avoid CORS issues
+      const response = await fetch('/api/claude', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': this.config.apiKey,
-          'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
+          apiKey: this.config.apiKey,
           model: this.config.model,
           max_tokens: this.config.maxTokens,
           temperature: this.config.temperature,
@@ -207,8 +207,8 @@ class ClaudeService {
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Claude API error: ${error}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.details?.error?.message || 'Claude API error');
       }
 
       const data = await response.json();
@@ -441,14 +441,14 @@ Guidelines:
    */
   async testConnection(): Promise<{ success: boolean; error?: string }> {
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      // Use the proxy API route to avoid CORS issues
+      const response = await fetch('/api/claude', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': this.config.apiKey,
-          'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
+          apiKey: this.config.apiKey,
           model: this.config.model,
           max_tokens: 10,
           messages: [{ role: 'user', content: 'Hi' }],
@@ -458,8 +458,8 @@ Guidelines:
       if (response.ok) {
         return { success: true };
       } else {
-        const error = await response.text();
-        return { success: false, error };
+        const errorData = await response.json().catch(() => ({}));
+        return { success: false, error: errorData.error || errorData.details?.error?.message || 'Connection failed' };
       }
     } catch (error) {
       return { 
