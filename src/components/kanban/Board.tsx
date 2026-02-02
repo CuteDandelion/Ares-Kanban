@@ -475,17 +475,8 @@ export function Board({ boardId }: BoardProps) {
                 <LayoutList className="h-4 w-4" />
               </AresButton>
               
-              {/* Settings Panel with Status Dot */}
-              <div className="flex items-center gap-2">
-                <SettingsPanel />
-                {claudeEnabled && (
-                  <PulsingStatusDot 
-                    state={claudeConnectionStatus === 'connected' ? 'online' : claudeConnectionStatus === 'error' ? 'error' : 'offline'} 
-                    size="sm" 
-                    pulse={claudeConnectionStatus === 'testing'} 
-                  />
-                )}
-              </div>
+              {/* Settings Panel - Status dot is inside the button */}
+              <SettingsPanel />
               
               {/* CLI Toggle Button */}
               <AresButton 

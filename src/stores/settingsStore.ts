@@ -75,10 +75,12 @@ export const useSettingsStore = create<SettingsState>()(
       testClaudeConnection: async () => {
         const { claudeApiKey } = get();
         if (!claudeApiKey) {
+          set({ claudeConnectionStatus: 'unknown', modelsError: null });
           return { success: false, error: 'API key not configured' };
         }
 
-        set({ claudeConnectionStatus: 'testing' });
+        // Clear any previous error and set status to testing
+        set({ claudeConnectionStatus: 'testing', modelsError: null });
 
         try {
           // Use the proxy API route to avoid CORS issues
@@ -96,19 +98,30 @@ export const useSettingsStore = create<SettingsState>()(
           });
 
           if (response.ok) {
-            set({ claudeConnectionStatus: 'connected' });
+            // SUCCESS: Clear error state and set connected
+            set({ 
+              claudeConnectionStatus: 'connected',
+              modelsError: null 
+            });
             return { success: true };
           } else {
             const errorData = await response.json().catch(() => ({}));
             const errorMessage = errorData.error || errorData.details?.error?.message || 'Connection failed';
-            set({ claudeConnectionStatus: 'error' });
+            set({ 
+              claudeConnectionStatus: 'error',
+              modelsError: errorMessage 
+            });
             return { success: false, error: errorMessage };
           }
         } catch (error) {
-          set({ claudeConnectionStatus: 'error' });
+          const errorMessage = error instanceof Error ? error.message : 'Connection failed - CORS issue or network error';
+          set({ 
+            claudeConnectionStatus: 'error',
+            modelsError: errorMessage 
+          });
           return { 
             success: false, 
-            error: error instanceof Error ? error.message : 'Connection failed - CORS issue or network error' 
+            error: errorMessage 
           };
         }
       },
