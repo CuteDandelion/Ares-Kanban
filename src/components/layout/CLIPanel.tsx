@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { PulsingStatusDot, StatusState } from '@/components/ui/PulsingStatusDot';
 
 export interface CLIMessage {
   id: string;
@@ -69,15 +70,15 @@ const CLIPrompt = () => (
 const MessageIcon = ({ type }: { type: CLIMessage['type'] }) => {
   switch (type) {
     case 'ares':
-      return <span className="text-ares-red-500">⚔️</span>;
+      return <PulsingStatusDot state="online" size="sm" pulse />;
     case 'user':
       return null;
     case 'agent':
       return <span className="text-orange-500">🤖</span>;
     case 'error':
-      return <span className="text-red-500">❌</span>;
+      return <PulsingStatusDot state="error" size="sm" pulse={false} />;
     case 'success':
-      return <span className="text-green-500">✅</span>;
+      return <PulsingStatusDot state="online" size="sm" pulse={false} />;
     default:
       return null;
   }
@@ -461,7 +462,7 @@ export function CLIPanel({
             <span className="text-ares-dark-500 text-xs">
               {formatTimestamp(new Date())}
             </span>
-            <span className="animate-pulse">⚔️ Processing...</span>
+            <PulsingStatusDot state="processing" size="sm" pulse showLabel label="Processing..." />
           </div>
         )}
         <div ref={messagesEndRef} />

@@ -19,7 +19,7 @@ interface BoardWithColumns extends Board {
   columns: ColumnWithCards[];
 }
 
-interface KanbanState {
+export interface KanbanState {
   boards: Board[];
   currentBoard: BoardWithColumns | null;
   isLoading: boolean; // Only used for initial load, not for operations
