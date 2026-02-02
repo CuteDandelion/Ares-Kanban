@@ -16,31 +16,32 @@ export interface ParsedCommand {
 }
 
 // Command patterns for parsing
+// Supports both natural language and slash-prefixed commands
 const COMMAND_PATTERNS = {
-  // Create patterns
-  createCard: /^(?:create|add|new)\s+(?:a\s+)?(?:card|task|issue)\s+(?:(?:called|named|titled)\s+)?["']?([^"']+)["']?(?:\s+in\s+["']?([^"']+)["']?)?(?:\s+.*)?$/i,
-  createColumn: /^(?:create|add|new)\s+(?:a\s+)?(?:column|list|stage)\s+(?:(?:called|named)\s+)?["']?([^"']+)["']?(?:\s+.*)?$/i,
+  // Create patterns - supports both "create card" and "/create card"
+  createCard: /^(?:\/?(?:create|add|new))\s+(?:a\s+)?(?:card|task|issue)\s+(?:(?:called|named|titled)\s+)?["']?([^"']+)["']?(?:\s+in\s+["']?([^"']+)["']?)?(?:\s+.*)?$/i,
+  createColumn: /^(?:\/?(?:create|add|new))\s+(?:a\s+)?(?:column|list|stage)\s+(?:(?:called|named)\s+)?["']?([^"']+)["']?(?:\s+.*)?$/i,
   
-  // Delete patterns
-  deleteCard: /^(?:delete|remove|destroy)\s+(?:card|task|issue)\s+(?:#(\d+)\s*|["']?([^"']+)["']?)$/i,
-  deleteColumn: /^(?:delete|remove|destroy)\s+(?:column|list|stage)\s+["']?([^"']+)["']?$/i,
+  // Delete patterns - supports both "delete card" and "/delete card"
+  deleteCard: /^(?:\/?(?:delete|remove|destroy))\s+(?:card|task|issue)\s+(?:#(\d+)\s*|["']?([^"']+)["']?)$/i,
+  deleteColumn: /^(?:\/?(?:delete|remove|destroy))\s+(?:column|list|stage)\s+["']?([^"']+)["']?$/i,
   
-  // Move patterns
-  moveCard: /^(?:move|transfer|shift)\s+(?:card|task|issue)\s+(?:#?(\d+)\s+|(?:["']?([^"']+)["']?\s+))?to\s+(?:column\s+)?["']?([^"']+)["']?$/i,
+  // Move patterns - supports both "move card" and "/move card"
+  moveCard: /^(?:\/?(?:move|transfer|shift))\s+(?:card|task|issue)\s+(?:#?(\d+)\s+|(?:["']?([^"']+)["']?\s+))?to\s+(?:column\s+)?["']?([^"']+)["']?$/i,
   
-  // Rename patterns
-  renameCard: /^(?:rename|retitle)\s+(?:card|task|issue)\s+(?:#?(\d+)\s+|(?:["']?([^"']+)["']?\s+))?to\s+["']?([^"']+)["']?$/i,
-  renameColumn: /^(?:rename)\s+(?:column|list|stage)\s+["']?([^"']+)["']?\s+to\s+["']?([^"']+)["']?$/i,
+  // Rename patterns - supports both "rename card" and "/rename card"
+  renameCard: /^(?:\/?(?:rename|retitle))\s+(?:card|task|issue)\s+(?:#?(\d+)\s+|(?:["']?([^"']+)["']?\s+))?to\s+["']?([^"']+)["']?$/i,
+  renameColumn: /^(?:\/?(?:rename))\s+(?:column|list|stage)\s+["']?([^"']+)["']?\s+to\s+["']?([^"']+)["']?$/i,
   
-  // Search patterns
-  searchCards: /^(?:search|find|lookup)\s+(?:for\s+)?(?:cards?|tasks?|issues?)?\s*(?:with\s+|containing\s+)?["']?([^"']+)["']?(?:\s+.*)?$/i,
+  // Search patterns - supports both "search query" and "/search query"
+  searchCards: /^(?:\/?(?:search|find|lookup))\s+(?:for\s+)?(?:cards?|tasks?|issues?)?\s*(?:with\s+|containing\s+)?["']?([^"']+)["']?(?:\s+.*)?$/i,
   
-  // Help patterns
-  help: /^(?:help|commands|\?|h)$/i,
-  helpCommand: /^(?:help|\?)\s+(\w+)$/i,
+  // Help patterns - supports "help", "?", "/help", "/?"
+  help: /^(?:\/?(?:help|commands|\?|h))$/i,
+  helpCommand: /^(?:\/?(?:help|\?))\s+(\w+)$/i,
   
-  // Clear patterns
-  clear: /^(?:clear|cls|clean)$/i,
+  // Clear patterns - supports "clear", "cls", "/clear", "/cls"
+  clear: /^(?:\/?(?:clear|cls|clean))$/i,
 };
 
 // Extract flags from command string
@@ -382,6 +383,11 @@ export const generateHelpText = (commandType?: string): string => {
   return `
 ARES COMMAND INTERFACE - AVAILABLE COMMANDS
 
+COMMAND SYNTAX:
+  You can use commands with or without the "/" prefix:
+  - Traditional: create card "Title" in "Column"
+  - Slash style: /create card "Title" in "Column"
+
 BOARD MANIPULATION:
   create  - Create cards and columns
   delete  - Remove cards and columns
@@ -394,12 +400,15 @@ SEARCH & UTILITY:
   clear   - Clear the CLI output
 
 USAGE EXAMPLES:
+  /create card "Fix login bug" in "Backlog" --priority high
+  /move card "Fix login bug" to "In Progress"
+  /search "bug" --priority critical
+  /delete card #123
+  /rename column "Backlog" to "To Do"
+  
+  Or without slash:
   create card "Fix login bug" in "Backlog" --priority high
-  move card "Fix login bug" to "In Progress"
-  search "bug" --priority critical
-  delete card #123
-  rename column "Backlog" to "To Do"
 
-Type "help <command>" for detailed syntax of a specific command.
+Type "help <command>" or "/help <command>" for detailed syntax.
 `;
 };

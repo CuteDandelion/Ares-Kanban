@@ -149,10 +149,8 @@ const SyntaxHighlightedInput = React.forwardRef<
   }
 >(
   ({ value, onChange, onKeyDown, disabled, placeholder }, ref) => {
-    const tokens = highlightSyntax(value);
-
     return (
-      <div className="relative flex-1">
+      <div className="flex-1">
         <input
           ref={ref}
           type="text"
@@ -162,24 +160,13 @@ const SyntaxHighlightedInput = React.forwardRef<
           disabled={disabled}
           placeholder={placeholder}
           className={cn(
-            'absolute inset-0 w-full bg-transparent border-none outline-none',
-            'font-mono text-sm text-transparent caret-white',
-            'disabled:opacity-50 z-10'
+            'w-full bg-transparent border-none outline-none',
+            'font-mono text-sm text-white caret-white',
+            'disabled:opacity-50 placeholder:text-ares-dark-500'
           )}
           autoComplete="off"
           spellCheck={false}
         />
-        <div className="font-mono text-sm pointer-events-none whitespace-pre">
-          {tokens.length > 0 ? (
-            tokens.map((token, i) => (
-              <span key={i} className={tokenTypeClasses[token.type]}>
-                {token.value}
-              </span>
-            ))
-          ) : (
-            <span className="text-ares-dark-500">{placeholder}</span>
-          )}
-        </div>
       </div>
     );
   }

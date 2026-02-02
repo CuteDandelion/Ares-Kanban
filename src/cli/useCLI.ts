@@ -3,6 +3,7 @@
  * 
  * Provides a React hook for managing CLI state and command execution.
  * Integrates with Claude API for natural language command processing.
+ * Supports enhanced mode with tool use and thinking visibility.
  */
 
 import { useState, useCallback, useRef } from 'react';
@@ -15,12 +16,20 @@ import {
 } from '@/cli/commandParser';
 import ClaudeService from '@/lib/claude/claudeService';
 import { dockerSandbox } from '@/lib/sandbox/DockerSandbox';
+import { useKanbanStore } from '@/stores/kanbanStore';
+import { 
+  generateSystemPrompt, 
+  parseToolCalls, 
+  executeBoardTool,
+  ThoughtStep 
+} from '@/cli/enhancedCLIService';
 
 export interface UseCLIProps {
   onCommand?: (command: ParsedCommand) => Promise<void> | void;
   maxHistory?: number;
   claudeService?: ClaudeService;
   claudeEnabled?: boolean;
+  thinkingMode?: boolean; // Enable thinking/reasoning visibility
 }
 
 export interface UseCLIReturn {
@@ -43,7 +52,8 @@ export const useCLI = ({
   onCommand, 
   maxHistory = 100,
   claudeService,
-  claudeEnabled = false
+  claudeEnabled = false,
+  thinkingMode = true // Default to showing thinking process
 }: UseCLIProps = {}): UseCLIReturn => {
   const [messages, setMessages] = useState<CLIMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -129,22 +139,77 @@ export const useCLI = ({
       // Use Claude if enabled
       if (claudeEnabled && claudeService) {
         try {
-          const response = await claudeService.sendMessage(commandText);
+          // Get current board context
+          const kanbanStore = useKanbanStore.getState();
+          const boardContext = kanbanStore.currentBoard ? {
+            name: kanbanStore.currentBoard.name,
+            columns: kanbanStore.currentBoard.columns.map(c => ({
+              name: c.title,
+              cardCount: c.cards.length
+            }))
+          } : null;
+
+          // Generate system prompt with tools and context
+          const systemPrompt = generateSystemPrompt(thinkingMode);
           
-          addMessage({
-            type: 'ares',
-            content: response.text,
-          });
+          // Build context-aware message with system prompt prepended
+          const boardContextStr = boardContext 
+            ? `\n\n[Context: Current board "${boardContext.name}" has ${boardContext.columns.length} columns: ${boardContext.columns.map(c => c.name).join(', ')}]`
+            : '';
+          
+          // Prepend system prompt to message
+          const fullMessage = `${systemPrompt}\n\n---\n\nUser: ${commandText}${boardContextStr}`;
+          
+          // Send to Claude
+          const response = await claudeService.sendMessage(fullMessage);
+          
+          // Parse tool calls and thoughts from response
+          const { text, toolCalls, thoughts } = parseToolCalls(response.text);
+          
+          // Show thinking process if enabled and thoughts exist
+          if (thinkingMode && thoughts.length > 0) {
+            for (const thought of thoughts) {
+              addMessage({
+                type: 'system',
+                content: `💭 ${thought.content}`,
+              });
+            }
+          }
+          
+          // Show main response
+          if (text) {
+            addMessage({
+              type: 'ares',
+              content: text,
+            });
+          }
 
           // Execute any tool calls
-          if (response.toolCalls && response.toolCalls.length > 0) {
-            const results = await claudeService.executeTools(response.toolCalls);
+          if (toolCalls.length > 0) {
+            addMessage({
+              type: 'system',
+              content: `🔧 Executing ${toolCalls.length} tool call(s)...`,
+            });
             
-            for (const result of results) {
+            for (const toolCall of toolCalls) {
+              const result = await executeBoardTool(toolCall, kanbanStore);
+              
               addMessage({
                 type: result.success ? 'success' : 'error',
-                content: `${result.name}: ${result.success ? 'Success' : 'Failed'} - ${JSON.stringify(result.result)}`,
+                content: `${result.success ? '✓' : '✗'} ${result.name}: ${result.success 
+                  ? (typeof result.result === 'object' 
+                    ? JSON.stringify(result.result, null, 2) 
+                    : result.result)
+                  : result.error}`,
               });
+              
+              // If tool succeeded, add confirmation
+              if (result.success) {
+                addMessage({
+                  type: 'ares',
+                  content: `I've ${toolCall.name.replace('_', ' ')}d "${toolCall.arguments.title || toolCall.arguments.card_title || toolCall.arguments.name || 'item'}" successfully.`,
+                });
+              }
             }
           }
         } catch (error) {
@@ -218,7 +283,7 @@ export const useCLI = ({
       processingRef.current = false;
       setIsProcessing(false);
     }
-  }, [addMessage, handleClearOutput, onCommand, claudeService, claudeEnabled]);
+  }, [addMessage, handleClearOutput, onCommand, claudeService, claudeEnabled, thinkingMode]);
 
   /**
    * Handle command submission
