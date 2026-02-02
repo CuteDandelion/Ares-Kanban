@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   DndContext, 
@@ -15,7 +16,6 @@ import {
   DropAnimation
 } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
-import { useState, useEffect } from 'react';
 import { Column as ColumnType, Card as CardType, CardPriority } from '@/types';
 
 // Extended Column type that includes cards (as used in the store)
@@ -26,11 +26,18 @@ import { Column } from './Column';
 import { ListView } from './ListView';
 import { AresButton } from '@/components/ui/ares-button';
 import { AresInput } from '@/components/ui/ares-input';
-import { Plus, ArrowLeft, LayoutList, Settings, X, Columns, Trash2, Calendar, Tag, AlertCircle } from 'lucide-react';
+import { Plus, ArrowLeft, LayoutList, X, Columns, Trash2, Calendar, Tag, AlertCircle, Terminal } from 'lucide-react';
 import { useKanbanStore } from '@/stores/kanbanStore';
 import { AresLogo } from '@/components/branding/AresLogo';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { CLIPanel } from '@/components/layout/CLIPanel';
+import { useCLI } from '@/cli/useCLI';
+import { SettingsPanel } from '@/components/settings/SettingsPanel';
+import { PulsingStatusDot } from '@/components/ui/PulsingStatusDot';
+import { useSettingsStore } from '@/stores/settingsStore';
+import ClaudeService from '@/lib/claude/claudeService';
+import { dockerSandbox } from '@/lib/sandbox/DockerSandbox';
 
 interface BoardProps {
   boardId: string;
@@ -64,6 +71,9 @@ export function Board({ boardId }: BoardProps) {
     unsubscribeFromBoard,
   } = useKanbanStore();
 
+  // Settings
+  const { claudeEnabled, claudeConnectionStatus, claudeApiKey } = useSettingsStore();
+
   const [activeCard, setActiveCard] = useState<CardType | null>(null);
   const [activeColumn, setActiveColumn] = useState<ColumnWithCards | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('board');
@@ -76,12 +86,29 @@ export function Board({ boardId }: BoardProps) {
   const [editTags, setEditTags] = useState('');
   const [editDueDate, setEditDueDate] = useState('');
   
-  // Settings Dialog State
-  const [showSettings, setShowSettings] = useState(false);
-  
   // Add Column Dialog State
   const [showAddColumn, setShowAddColumn] = useState(false);
   const [newColumnTitle, setNewColumnTitle] = useState('');
+  
+  // CLI State
+  const [showCLI, setShowCLI] = useState(false);
+  
+  // Initialize Claude service
+  const claudeServiceRef = React.useRef<ClaudeService | null>(null);
+  
+  React.useEffect(() => {
+    if (claudeApiKey && !claudeServiceRef.current) {
+      claudeServiceRef.current = new ClaudeService({ apiKey: claudeApiKey });
+      // Set the store for the Claude service
+      const store = useKanbanStore.getState();
+      claudeServiceRef.current.setStore(() => useKanbanStore.getState());
+    }
+  }, [claudeApiKey]);
+  
+  const { messages, isProcessing, cliHeight, setCLIHeight, handleCommandSubmit, handleClearOutput } = useCLI({
+    claudeService: claudeServiceRef.current || undefined,
+    claudeEnabled: claudeEnabled && !!claudeApiKey,
+  });
   
   // DndKit sensors
   const sensors = useSensors(
@@ -104,6 +131,23 @@ export function Board({ boardId }: BoardProps) {
       unsubscribeFromBoard();
     };
   }, [boardId, loadBoard, subscribeToBoard, unsubscribeFromBoard]);
+
+  // Keyboard shortcut for toggling CLI (Ctrl+`)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        setShowCLI(prev => !prev);
+      }
+      // Esc to close CLI
+      if (e.key === 'Escape' && showCLI) {
+        setShowCLI(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showCLI]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
@@ -427,14 +471,26 @@ export function Board({ boardId }: BoardProps) {
                 <LayoutList className="h-4 w-4" />
               </AresButton>
               
-              {/* Settings Button */}
+              {/* Settings Panel with Status Dot */}
+              <div className="flex items-center gap-2">
+                <SettingsPanel />
+                {claudeEnabled && (
+                  <PulsingStatusDot 
+                    state={claudeConnectionStatus === 'connected' ? 'online' : claudeConnectionStatus === 'error' ? 'error' : 'offline'} 
+                    size="sm" 
+                    pulse={claudeConnectionStatus === 'testing'} 
+                  />
+                )}
+              </div>
+              
+              {/* CLI Toggle Button */}
               <AresButton 
-                variant="secondary" 
+                variant={showCLI ? 'primary' : 'secondary'}
                 size="icon"
-                onClick={() => setShowSettings(true)}
-                title="Board Settings"
+                onClick={() => setShowCLI(!showCLI)}
+                title="Toggle CLI"
               >
-                <Settings className="h-4 w-4" />
+                <Terminal className="h-4 w-4" />
               </AresButton>
               
               {/* Add Column Button */}
@@ -633,56 +689,17 @@ export function Board({ boardId }: BoardProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Settings Dialog */}
-      <Dialog open={showSettings} onOpenChange={setShowSettings}>
-        <DialogContent className="bg-ares-dark-850 border-ares-dark-700 text-white" aria-describedby="settings-description">
-          <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <Settings className="h-5 w-5 text-ares-red-500" />
-              Board Settings
-            </DialogTitle>
-            <p id="settings-description" className="text-sm text-ares-dark-400">
-              Manage your board configuration
-            </p>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="flex items-center justify-between p-3 bg-ares-dark-900 rounded-lg">
-              <div>
-                <h4 className="font-medium text-white">Board Name</h4>
-                <p className="text-sm text-ares-dark-400">{currentBoard.name}</p>
-              </div>
-              <AresButton variant="secondary" size="sm">
-                Edit
-              </AresButton>
-            </div>
-            
-            <div className="flex items-center justify-between p-3 bg-ares-dark-900 rounded-lg">
-              <div>
-                <h4 className="font-medium text-white">Columns</h4>
-                <p className="text-sm text-ares-dark-400">{currentBoard.columns.length} columns</p>
-              </div>
-              <Columns className="h-5 w-5 text-ares-dark-500" />
-            </div>
-            
-            <div className="flex items-center justify-between p-3 bg-ares-dark-900 rounded-lg">
-              <div>
-                <h4 className="font-medium text-white">Total Cards</h4>
-                <p className="text-sm text-ares-dark-400">
-                  {currentBoard.columns.reduce((acc, col) => acc + col.cards.length, 0)} cards
-                </p>
-              </div>
-              <LayoutList className="h-5 w-5 text-ares-dark-500" />
-            </div>
-          </div>
-          
-          <div className="flex justify-end">
-            <AresButton onClick={() => setShowSettings(false)}>
-              Close
-            </AresButton>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* CLI Panel */}
+      {showCLI && (
+        <CLIPanel
+          messages={messages}
+          isProcessing={isProcessing}
+          height={cliHeight}
+          onHeightChange={setCLIHeight}
+          onCommandSubmit={handleCommandSubmit}
+          onClearOutput={handleClearOutput}
+        />
+      )}
 
       {/* Add Column Dialog */}
       <Dialog open={showAddColumn} onOpenChange={setShowAddColumn}>
