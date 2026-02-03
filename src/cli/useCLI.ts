@@ -31,14 +31,14 @@ export interface UseCLIProps {
   thinkingMode?: boolean; // Enable thinking/reasoning visibility
 }
 
-export interface UseCLIReturn {
+  export interface UseCLIReturn {
   messages: CLIMessage[];
   isProcessing: boolean;
   cliHeight: number;
   setCLIHeight: (height: number) => void;
   handleCommandSubmit: (command: string) => void;
   handleClearOutput: () => void;
-  addMessage: (message: Omit<CLIMessage, 'id' | 'timestamp'>) => void;
+  addMessage: (message: Omit<CLIMessage, 'id' | 'timestamp'>) => string;
 }
 
 // Generate unique ID for messages
@@ -61,6 +61,7 @@ export const useCLI = ({
 
   /**
    * Add a message to the CLI output
+   * @returns The ID of the created message (for creating child messages)
    */
   const addMessage = useCallback((message: Omit<CLIMessage, 'id' | 'timestamp'>) => {
     const newMessage: CLIMessage = {
@@ -77,6 +78,8 @@ export const useCLI = ({
       }
       return updated;
     });
+    
+    return newMessage.id;
   }, [maxHistory]);
 
   /**
@@ -163,12 +166,16 @@ export const useCLI = ({
 
           // Execute any tool calls from Claude's native tool_use blocks
           if (response.toolCalls && response.toolCalls.length > 0) {
-            addMessage({
+            // Create parent message for tool execution
+            const toolParentMessageId = addMessage({
               type: 'tool',
               content: `🔧 Executing ${response.toolCalls.length} tool call(s)...`,
             });
             
             for (const toolUse of response.toolCalls) {
+              // Track execution time for each tool
+              const toolStartTime = Date.now();
+              
               // Convert Claude's native ToolUse format to enhancedCLIService format
               const toolCall: ToolCall = {
                 name: toolUse.name,
@@ -176,7 +183,17 @@ export const useCLI = ({
               };
               
               const result = await executeBoardTool(toolCall, kanbanStore);
+              const toolResponseTime = Date.now() - toolStartTime;
               
+              // Add tool call as child of parent message
+              const toolCallMessageId = addMessage({
+                type: 'tool',
+                content: `call ${result.name}`,
+                parentId: toolParentMessageId,
+                responseTime: toolResponseTime,
+              });
+              
+              // Add tool result as child of the tool call
               addMessage({
                 type: result.success ? 'success' : 'error',
                 content: `${result.success ? '✓' : '✗'} ${result.name}: ${result.success 
@@ -184,14 +201,16 @@ export const useCLI = ({
                     ? JSON.stringify(result.result, null, 2) 
                     : result.result)
                   : result.error}`,
+                parentId: toolCallMessageId,
               });
               
-              // If tool succeeded, add confirmation
+              // If tool succeeded, add confirmation as child of result
               if (result.success) {
                 const itemName = toolCall.arguments.title || toolCall.arguments.card_title || toolCall.arguments.name || 'item';
                 addMessage({
                   type: 'ares',
                   content: `I've ${toolCall.name.replace(/_/g, ' ')} "${itemName}" successfully.`,
+                  parentId: toolCallMessageId,
                 });
               }
             }

@@ -11,6 +11,9 @@ export interface CLIMessage {
   timestamp: Date;
   agentName?: string;
   responseTime?: number; // Response time in milliseconds
+  parentId?: string; // Parent message ID for hierarchical display
+  isCollapsed?: boolean; // Whether child messages are collapsed
+  toolName?: string; // Name of the tool being called (for tool type messages)
 }
 
 export type SyntaxToken = {
@@ -67,6 +70,90 @@ export const AUTOCOMPLETE_SUGGESTIONS: AutocompleteSuggestion[] = [
 const CLIPrompt = () => (
   <span className="text-cyan-400 font-mono font-bold">USER&gt;</span>
 );
+
+// Recursive MessageItem component for hierarchical display
+interface MessageItemProps {
+  message: CLIMessage;
+  formatTimestamp: (date: Date) => string;
+  depth?: number;
+  getChildMessages: (id: string) => CLIMessage[];
+}
+
+const MessageItem = ({ message, formatTimestamp, depth = 0, getChildMessages }: MessageItemProps) => {
+  const childMessages = getChildMessages(message.id);
+  const hasChildren = childMessages.length > 0;
+  const [isExpanded, setIsExpanded] = React.useState(true);
+  
+  const getIndentClass = (d: number) => {
+    switch (d) {
+      case 0: return '';
+      case 1: return 'ml-6';
+      case 2: return 'ml-12';
+      default: return `ml-${Math.min(d * 6, 24)}`;
+    }
+  };
+  
+  return (
+    <div className={cn('animate-fade-in', getIndentClass(depth))}>
+      <div className={cn('flex gap-2', message.type === 'user' && depth === 0 && 'ml-4')}>
+        <span className="text-ares-dark-500 text-xs shrink-0 pt-0.5">
+          {formatTimestamp(message.timestamp)}
+        </span>
+        <span className="shrink-0">
+          <MessageIcon type={message.type} />
+        </span>
+        {message.type === 'user' ? (
+          <span className={messageTypeClasses.user}>
+            <CLIPrompt /> {message.content}
+          </span>
+        ) : message.type === 'agent' && message.agentName ? (
+          <div className="flex flex-col">
+            <span className="text-purple-400 text-xs">[{message.agentName}]</span>
+            <span className={messageTypeClasses[message.type]}>
+              {message.content}
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-col flex-1">
+            <div className="flex items-center gap-2">
+              <span className={messageTypeClasses[message.type]}>
+                {hasChildren && (
+                  <button
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    className="mr-1 text-ares-dark-400 hover:text-white transition-colors"
+                  >
+                    {isExpanded ? '▼' : '▶'}
+                  </button>
+                )}
+                {message.content}
+              </span>
+            </div>
+            {message.responseTime && message.responseTime > 0 && (
+              <span className="text-ares-dark-500 text-xs mt-0.5">
+                ✓ Response time: {(message.responseTime / 1000).toFixed(2)}s
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+      
+      {/* Render child messages if expanded */}
+      {hasChildren && isExpanded && (
+        <div className="mt-1">
+          {childMessages.map(child => (
+            <MessageItem
+              key={child.id}
+              message={child}
+              formatTimestamp={formatTimestamp}
+              depth={depth + 1}
+              getChildMessages={getChildMessages}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const MessageIcon = ({ type }: { type: CLIMessage['type'] }) => {
   switch (type) {
@@ -383,6 +470,34 @@ export function CLIPanel({
     });
   };
 
+  // Organize messages hierarchically
+  const organizeMessagesHierarchically = (msgs: CLIMessage[]) => {
+    const parentMap = new Map<string, CLIMessage[]>();
+    const rootMessages: CLIMessage[] = [];
+    const messageMap = new Map<string, CLIMessage>();
+    
+    // First pass: build message map
+    msgs.forEach(msg => {
+      messageMap.set(msg.id, msg);
+    });
+    
+    // Second pass: organize into hierarchy
+    msgs.forEach(msg => {
+      if (msg.parentId) {
+        if (!parentMap.has(msg.parentId)) {
+          parentMap.set(msg.parentId, []);
+        }
+        parentMap.get(msg.parentId)!.push(msg);
+      } else {
+        rootMessages.push(msg);
+      }
+    });
+    
+    return { rootMessages, parentMap, messageMap };
+  };
+
+  const { rootMessages, parentMap, messageMap } = organizeMessagesHierarchically(messages);
+
   return (
     <div
       ref={containerRef}
@@ -420,44 +535,14 @@ export function CLIPanel({
             </p>
           </div>
         ) : (
-          messages.map((message) => (
-            <div
+          rootMessages.map((message) => (
+            <MessageItem
               key={message.id}
-              className={cn(
-                'flex gap-2 animate-fade-in',
-                message.type === 'user' && 'ml-4'
-              )}
-            >
-              <span className="text-ares-dark-500 text-xs shrink-0 pt-0.5">
-                {formatTimestamp(message.timestamp)}
-              </span>
-              <span className="shrink-0">
-                <MessageIcon type={message.type} />
-              </span>
-              {message.type === 'user' ? (
-                <span className={messageTypeClasses.user}>
-                  <CLIPrompt /> {message.content}
-                </span>
-              ) : message.type === 'agent' && message.agentName ? (
-                <div className="flex flex-col">
-                  <span className="text-purple-400 text-xs">[{message.agentName}]</span>
-                  <span className={messageTypeClasses[message.type]}>
-                    {message.content}
-                  </span>
-                </div>
-              ) : (
-                <div className="flex flex-col flex-1">
-                  <span className={messageTypeClasses[message.type]}>
-                    {message.content}
-                  </span>
-                  {message.responseTime && message.responseTime > 0 && (
-                    <span className="text-ares-dark-500 text-xs mt-0.5">
-                      ✓ Response time: {(message.responseTime / 1000).toFixed(2)}s
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
+              message={message}
+              formatTimestamp={formatTimestamp}
+              depth={0}
+              getChildMessages={(id) => parentMap.get(id) || []}
+            />
           ))
         )}
         {isProcessing && (
