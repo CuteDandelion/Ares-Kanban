@@ -4,6 +4,53 @@ This file tracks all development activities, files created, and important contex
 
 ---
 
+## [2026-02-03] UI: CLI Improvements - Response Time, Colors, Prompt
+
+### Changes
+1. **Response Time**: Added "✓ Response time: X.XXs" indicator for Claude responses
+2. **Color Coding**: Improved message colors (blue for ARES, cyan for user, purple for agent, etc.)
+3. **Prompt Change**: Changed `ARES>` to `USER>` (cyan color)
+4. **Status Dots**: Added new states (info, agent, thinking, tool, success) with better colors
+
+### Files Modified
+- `src/components/layout/CLIPanel.tsx` - New message types, colors, response time display
+- `src/components/ui/PulsingStatusDot.tsx` - New status states
+- `src/cli/useCLI.ts` - Response time tracking
+- `tailwind.config.js` - New glow shadows
+
+### Build
+✓ npm run build - SUCCESS
+✓ npm run lint - PASSED
+
+---
+
+## [2026-02-03] FIX: CLI Tool Execution Not Working
+
+### Problem
+The ARES CLI was showing the AI's thinking process but not actually creating/moving/deleting cards on the Kanban board when using natural language commands.
+
+### Root Cause
+Two different tool-use approaches were being mixed incorrectly:
+- `claudeService.ts` uses Claude's native `tools` API with `tool_use` response blocks
+- `enhancedCLIService.ts` uses custom XML `<tool_call>` tags
+- `useCLI.ts` was prepending XML-style prompts but Claude was returning native `tool_use` blocks
+
+### Solution
+Unified to use Claude's native tool format:
+- Modified `useCLI.ts` to use `claudeService.sendMessage()` properly
+- Map Claude's native `ToolUse` format to `ToolCall` format for execution
+- Execute tools via `executeBoardTool()` from enhancedCLIService
+
+### Files Modified
+- `src/cli/useCLI.ts` - Fixed tool execution flow
+- `src/cli/enhancedCLIService.ts` - Added named export for BOARD_TOOLS
+
+### Build
+✓ npm run build - SUCCESS
+✓ npm run lint - PASSED
+
+---
+
 ## [2026-02-02] REBUILD & REDEPLOY: Complete Application Rebuild and Docker Deployment
 
 ### Summary

@@ -518,6 +518,8 @@ export function parseToolCalls(response: string): { text: string; toolCalls: Too
   };
 }
 
+export { BOARD_TOOLS };
+
 export default {
   BOARD_TOOLS,
   executeBoardTool,

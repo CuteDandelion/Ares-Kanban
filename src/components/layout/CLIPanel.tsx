@@ -6,10 +6,11 @@ import { PulsingStatusDot, StatusState } from '@/components/ui/PulsingStatusDot'
 
 export interface CLIMessage {
   id: string;
-  type: 'ares' | 'user' | 'agent' | 'system' | 'error' | 'success';
+  type: 'ares' | 'user' | 'agent' | 'system' | 'error' | 'success' | 'thinking' | 'tool';
   content: string;
   timestamp: Date;
   agentName?: string;
+  responseTime?: number; // Response time in milliseconds
 }
 
 export type SyntaxToken = {
@@ -64,33 +65,41 @@ export const AUTOCOMPLETE_SUGGESTIONS: AutocompleteSuggestion[] = [
 ];
 
 const CLIPrompt = () => (
-  <span className="text-ares-red-500 font-mono font-bold">ARES&gt;</span>
+  <span className="text-cyan-400 font-mono font-bold">USER&gt;</span>
 );
 
 const MessageIcon = ({ type }: { type: CLIMessage['type'] }) => {
   switch (type) {
     case 'ares':
-      return <PulsingStatusDot state="online" size="sm" pulse />;
+      return <PulsingStatusDot state="info" size="sm" pulse={false} />;
     case 'user':
-      return null;
+      return <span className="text-cyan-500">⌨️</span>;
     case 'agent':
-      return <span className="text-orange-500">🤖</span>;
+      return <PulsingStatusDot state="agent" size="sm" pulse={false} />;
+    case 'thinking':
+      return <PulsingStatusDot state="thinking" size="sm" pulse />;
+    case 'tool':
+      return <PulsingStatusDot state="tool" size="sm" pulse={false} />;
     case 'error':
       return <PulsingStatusDot state="error" size="sm" pulse={false} />;
     case 'success':
-      return <PulsingStatusDot state="online" size="sm" pulse={false} />;
+      return <PulsingStatusDot state="success" size="sm" pulse={false} />;
+    case 'system':
+      return <span className="text-ares-dark-500">⚙️</span>;
     default:
       return null;
   }
 };
 
 const messageTypeClasses = {
-  ares: 'text-ares-red-400',
-  user: 'text-ares-red-300',
-  agent: 'text-orange-400',
-  system: 'text-ares-dark-400',
-  error: 'text-red-400',
-  success: 'text-green-400',
+  ares: 'text-blue-400',           // ARES responses - blue (calm, AI-like)
+  user: 'text-cyan-400',           // User input - cyan (distinct from ARES)
+  agent: 'text-purple-400',        // Agent messages - purple
+  system: 'text-ares-dark-400',    // System messages - gray
+  error: 'text-red-400',           // Errors - red
+  success: 'text-emerald-400',     // Success - emerald green
+  thinking: 'text-amber-400',      // Thinking/processing - amber
+  tool: 'text-violet-400',         // Tool execution - violet
 };
 
 const tokenTypeClasses = {
@@ -426,30 +435,37 @@ export function CLIPanel({
                 <MessageIcon type={message.type} />
               </span>
               {message.type === 'user' ? (
-                <span className="text-ares-red-300">
+                <span className={messageTypeClasses.user}>
                   <CLIPrompt /> {message.content}
                 </span>
               ) : message.type === 'agent' && message.agentName ? (
                 <div className="flex flex-col">
-                  <span className="text-orange-500 text-xs">[{message.agentName}]</span>
+                  <span className="text-purple-400 text-xs">[{message.agentName}]</span>
                   <span className={messageTypeClasses[message.type]}>
                     {message.content}
                   </span>
                 </div>
               ) : (
-                <span className={messageTypeClasses[message.type]}>
-                  {message.content}
-                </span>
+                <div className="flex flex-col flex-1">
+                  <span className={messageTypeClasses[message.type]}>
+                    {message.content}
+                  </span>
+                  {message.responseTime && message.responseTime > 0 && (
+                    <span className="text-ares-dark-500 text-xs mt-0.5">
+                      ✓ Response time: {(message.responseTime / 1000).toFixed(2)}s
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           ))
         )}
         {isProcessing && (
-          <div className="flex gap-2 items-center text-ares-dark-400">
+          <div className="flex gap-2 items-center">
             <span className="text-ares-dark-500 text-xs">
               {formatTimestamp(new Date())}
             </span>
-            <PulsingStatusDot state="processing" size="sm" pulse showLabel label="Processing..." />
+            <PulsingStatusDot state="thinking" size="sm" pulse showLabel label="Thinking..." />
           </div>
         )}
         <div ref={messagesEndRef} />
