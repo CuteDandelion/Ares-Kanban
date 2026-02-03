@@ -18,10 +18,9 @@ import ClaudeService from '@/lib/claude/claudeService';
 import { dockerSandbox } from '@/lib/sandbox/DockerSandbox';
 import { useKanbanStore } from '@/stores/kanbanStore';
 import { 
-  generateSystemPrompt, 
-  parseToolCalls, 
   executeBoardTool,
-  ThoughtStep 
+  ToolCall,
+  BOARD_TOOLS
 } from '@/cli/enhancedCLIService';
 
 export interface UseCLIProps {
@@ -142,56 +141,40 @@ export const useCLI = ({
           // Get current board context
           const kanbanStore = useKanbanStore.getState();
           const boardContext = kanbanStore.currentBoard ? {
-            name: kanbanStore.currentBoard.name,
-            columns: kanbanStore.currentBoard.columns.map(c => ({
-              name: c.title,
-              cardCount: c.cards.length
-            }))
-          } : null;
+            boardName: kanbanStore.currentBoard.name,
+            columns: kanbanStore.currentBoard.columns.map(c => c.title)
+          } : undefined;
 
-          // Generate system prompt with tools and context
-          const systemPrompt = generateSystemPrompt(thinkingMode);
+          // Track response time
+          const startTime = Date.now();
           
-          // Build context-aware message with system prompt prepended
-          const boardContextStr = boardContext 
-            ? `\n\n[Context: Current board "${boardContext.name}" has ${boardContext.columns.length} columns: ${boardContext.columns.map(c => c.name).join(', ')}]`
-            : '';
+          // Send to Claude with native tool support
+          const response = await claudeService.sendMessage(commandText, boardContext);
+          const responseTime = Date.now() - startTime;
           
-          // Prepend system prompt to message
-          const fullMessage = `${systemPrompt}\n\n---\n\nUser: ${commandText}${boardContextStr}`;
-          
-          // Send to Claude
-          const response = await claudeService.sendMessage(fullMessage);
-          
-          // Parse tool calls and thoughts from response
-          const { text, toolCalls, thoughts } = parseToolCalls(response.text);
-          
-          // Show thinking process if enabled and thoughts exist
-          if (thinkingMode && thoughts.length > 0) {
-            for (const thought of thoughts) {
-              addMessage({
-                type: 'system',
-                content: `💭 ${thought.content}`,
-              });
-            }
-          }
-          
-          // Show main response
-          if (text) {
+          // Show main response text with response time
+          if (response.text) {
             addMessage({
               type: 'ares',
-              content: text,
+              content: response.text,
+              responseTime,
             });
           }
 
-          // Execute any tool calls
-          if (toolCalls.length > 0) {
+          // Execute any tool calls from Claude's native tool_use blocks
+          if (response.toolCalls && response.toolCalls.length > 0) {
             addMessage({
-              type: 'system',
-              content: `🔧 Executing ${toolCalls.length} tool call(s)...`,
+              type: 'tool',
+              content: `🔧 Executing ${response.toolCalls.length} tool call(s)...`,
             });
             
-            for (const toolCall of toolCalls) {
+            for (const toolUse of response.toolCalls) {
+              // Convert Claude's native ToolUse format to enhancedCLIService format
+              const toolCall: ToolCall = {
+                name: toolUse.name,
+                arguments: toolUse.input
+              };
+              
               const result = await executeBoardTool(toolCall, kanbanStore);
               
               addMessage({
@@ -205,14 +188,16 @@ export const useCLI = ({
               
               // If tool succeeded, add confirmation
               if (result.success) {
+                const itemName = toolCall.arguments.title || toolCall.arguments.card_title || toolCall.arguments.name || 'item';
                 addMessage({
                   type: 'ares',
-                  content: `I've ${toolCall.name.replace('_', ' ')}d "${toolCall.arguments.title || toolCall.arguments.card_title || toolCall.arguments.name || 'item'}" successfully.`,
+                  content: `I've ${toolCall.name.replace(/_/g, ' ')} "${itemName}" successfully.`,
                 });
               }
             }
           }
         } catch (error) {
+          console.error('Claude processing error:', error);
           addMessage({
             type: 'error',
             content: error instanceof Error ? error.message : 'Claude processing failed',

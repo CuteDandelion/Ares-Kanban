@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-export type StatusState = 'online' | 'processing' | 'error' | 'offline' | 'warning';
+export type StatusState = 'online' | 'processing' | 'error' | 'offline' | 'warning' | 'info' | 'agent' | 'thinking' | 'tool' | 'success';
 
 export interface PulsingStatusDotProps {
   state: StatusState;
@@ -16,13 +16,13 @@ export interface PulsingStatusDotProps {
 
 const stateColors: Record<StatusState, { bg: string; glow: string; label: string }> = {
   online: {
-    bg: 'bg-green-500',
-    glow: 'shadow-glow-green',
+    bg: 'bg-emerald-500',
+    glow: 'shadow-glow-emerald',
     label: 'Online',
   },
   processing: {
-    bg: 'bg-yellow-400',
-    glow: 'shadow-glow-yellow',
+    bg: 'bg-amber-400',
+    glow: 'shadow-glow-amber',
     label: 'Processing',
   },
   error: {
@@ -31,7 +31,7 @@ const stateColors: Record<StatusState, { bg: string; glow: string; label: string
     label: 'Error',
   },
   offline: {
-    bg: 'bg-gray-500',
+    bg: 'bg-slate-500',
     glow: '',
     label: 'Offline',
   },
@@ -39,6 +39,31 @@ const stateColors: Record<StatusState, { bg: string; glow: string; label: string
     bg: 'bg-orange-500',
     glow: 'shadow-glow-orange',
     label: 'Warning',
+  },
+  info: {
+    bg: 'bg-blue-500',
+    glow: 'shadow-glow-blue',
+    label: 'Info',
+  },
+  agent: {
+    bg: 'bg-purple-500',
+    glow: 'shadow-glow-purple',
+    label: 'Agent',
+  },
+  thinking: {
+    bg: 'bg-amber-400',
+    glow: 'shadow-glow-amber',
+    label: 'Thinking',
+  },
+  tool: {
+    bg: 'bg-violet-500',
+    glow: 'shadow-glow-violet',
+    label: 'Tool',
+  },
+  success: {
+    bg: 'bg-emerald-500',
+    glow: 'shadow-glow-emerald',
+    label: 'Success',
   },
 };
 
@@ -76,11 +101,16 @@ export function PulsingStatusDot({
         <span
           className={cn(
             'text-xs font-medium',
-            state === 'online' && 'text-green-400',
-            state === 'processing' && 'text-yellow-400',
+            state === 'online' && 'text-emerald-400',
+            state === 'processing' && 'text-amber-400',
             state === 'error' && 'text-red-400',
-            state === 'offline' && 'text-gray-400',
-            state === 'warning' && 'text-orange-400'
+            state === 'offline' && 'text-slate-400',
+            state === 'warning' && 'text-orange-400',
+            state === 'info' && 'text-blue-400',
+            state === 'agent' && 'text-purple-400',
+            state === 'thinking' && 'text-amber-400',
+            state === 'tool' && 'text-violet-400',
+            state === 'success' && 'text-emerald-400'
           )}
         >
           {displayLabel}
