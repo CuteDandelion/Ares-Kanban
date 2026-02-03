@@ -22,3 +22,8 @@ export {
   type AgentSidebarProps,
   type Agent,
 } from './AgentSidebar';
+
+export {
+  MemoryViewerPanel,
+  type MemoryViewerPanelProps,
+} from './MemoryViewerPanel';
