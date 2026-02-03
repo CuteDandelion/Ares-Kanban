@@ -1,12 +1,18 @@
 /**
- * ARES CLI Hook
+ * ARES CLI Hook - Hybrid Memory + Chain of Thought
  * 
- * Provides a React hook for managing CLI state and command execution.
- * Integrates with Claude API for natural language command processing.
- * Supports enhanced mode with tool use and thinking visibility.
+ * Enhanced CLI hook with:
+ * - Contextual memory persistence (localStorage)
+ * - Chain of Thought reasoning visibility
+ * - Context reference resolution ("it", "that", etc.)
+ * - Multi-step ReAct pattern
+ * - Memory statistics display
+ * 
+ * This replaces the basic useCLI hook with a fully-featured
+ * hybrid system combining memory and reasoning.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { CLIMessage } from '@/components/layout/CLIPanel';
 import { 
   parseCommand, 
@@ -22,16 +28,26 @@ import {
   ToolCall,
   BOARD_TOOLS
 } from '@/cli/enhancedCLIService';
+import { 
+  HybridOrchestrator, 
+  HybridEvent,
+  HybridConfig,
+  MemoryManager,
+  ReActEngine,
+  getHybridOrchestrator
+} from '@/memory';
 
 export interface UseCLIProps {
   onCommand?: (command: ParsedCommand) => Promise<void> | void;
   maxHistory?: number;
   claudeService?: ClaudeService;
   claudeEnabled?: boolean;
-  thinkingMode?: boolean; // Enable thinking/reasoning visibility
+  thinkingMode?: boolean;
+  memoryEnabled?: boolean;
+  hybridConfig?: HybridConfig;
 }
 
-  export interface UseCLIReturn {
+export interface UseCLIReturn {
   messages: CLIMessage[];
   isProcessing: boolean;
   cliHeight: number;
@@ -39,29 +55,127 @@ export interface UseCLIProps {
   handleCommandSubmit: (command: string) => void;
   handleClearOutput: () => void;
   addMessage: (message: Omit<CLIMessage, 'id' | 'timestamp'>) => string;
+  
+  // Memory features
+  memoryStats: {
+    totalEntries: number;
+    sessionCount: number;
+    storageSize: string;
+  } | null;
+  clearMemory: () => void;
+  showMemoryPanel: boolean;
+  setShowMemoryPanel: (show: boolean) => void;
+  
+  // Chain of Thought features
+  currentThinking: string | null;
+  reactSteps: Array<{ type: string; content: string }>;
 }
 
 // Generate unique ID for messages
 const generateId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 /**
- * React hook for managing CLI state and command execution
+ * React hook for managing CLI state with Hybrid Memory + Chain of Thought
  */
 export const useCLI = ({ 
   onCommand, 
   maxHistory = 100,
   claudeService,
   claudeEnabled = false,
-  thinkingMode = true // Default to showing thinking process
+  thinkingMode = true,
+  memoryEnabled = true,
+  hybridConfig = {},
 }: UseCLIProps = {}): UseCLIReturn => {
   const [messages, setMessages] = useState<CLIMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [cliHeight, setCLIHeight] = useState(300);
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+  const [currentThinking, setCurrentThinking] = useState<string | null>(null);
+  const [reactSteps, setReactSteps] = useState<Array<{ type: string; content: string }>>([]);
+  const [memoryStats, setMemoryStats] = useState<UseCLIReturn['memoryStats']>(null);
+  
   const processingRef = useRef(false);
+  const orchestratorRef = useRef<HybridOrchestrator | null>(null);
+
+  // Initialize orchestrator
+  useEffect(() => {
+    if (memoryEnabled || thinkingMode) {
+      orchestratorRef.current = getHybridOrchestrator({
+        ...hybridConfig,
+        enableMemory: memoryEnabled,
+        enableThinking: thinkingMode,
+      });
+
+      // Subscribe to events
+      const unsubscribe = orchestratorRef.current.onEvent((event: HybridEvent) => {
+        handleHybridEvent(event);
+      });
+
+      // Update memory stats
+      updateMemoryStats();
+
+      return () => {
+        unsubscribe();
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memoryEnabled, thinkingMode]);
+
+  /**
+   * Update memory statistics
+   */
+  const updateMemoryStats = useCallback(() => {
+    if (orchestratorRef.current) {
+      const stats = orchestratorRef.current.getMemoryStats();
+      setMemoryStats({
+        totalEntries: stats.totalEntries,
+        sessionCount: stats.sessionCount,
+        storageSize: stats.storageSize,
+      });
+    }
+  }, []);
+
+  /**
+   * Handle hybrid orchestrator events
+   */
+  const handleHybridEvent = useCallback((event: HybridEvent) => {
+    switch (event.type) {
+      case 'thinking':
+        const step = event.data as { content: string };
+        setCurrentThinking(step.content);
+        setReactSteps(prev => [...prev, { type: 'thinking', content: step.content }]);
+        break;
+
+      case 'tool_start':
+        setReactSteps(prev => [...prev, { 
+          type: 'action', 
+          content: 'Executing tool...' 
+        }]);
+        break;
+
+      case 'tool_complete':
+        setReactSteps(prev => [...prev, { 
+          type: 'result', 
+          content: 'Complete' 
+        }]);
+        break;
+
+      case 'memory_update':
+        // Handled separately
+        break;
+
+      case 'complete':
+        setCurrentThinking(null);
+        break;
+
+      case 'error':
+        setCurrentThinking(null);
+        break;
+    }
+  }, []);
 
   /**
    * Add a message to the CLI output
-   * @returns The ID of the created message (for creating child messages)
    */
   const addMessage = useCallback((message: Omit<CLIMessage, 'id' | 'timestamp'>) => {
     const newMessage: CLIMessage = {
@@ -72,7 +186,6 @@ export const useCLI = ({
 
     setMessages((prev) => {
       const updated = [...prev, newMessage];
-      // Keep only the last maxHistory messages
       if (updated.length > maxHistory) {
         return updated.slice(-maxHistory);
       }
@@ -87,6 +200,7 @@ export const useCLI = ({
    */
   const handleClearOutput = useCallback(() => {
     setMessages([]);
+    setReactSteps([]);
     addMessage({
       type: 'system',
       content: 'Output cleared.',
@@ -94,12 +208,27 @@ export const useCLI = ({
   }, [addMessage]);
 
   /**
-   * Process a command and generate responses
+   * Clear memory
+   */
+  const clearMemory = useCallback(() => {
+    if (orchestratorRef.current) {
+      orchestratorRef.current.clearMemory();
+      updateMemoryStats();
+      addMessage({
+        type: 'system',
+        content: 'Memory cleared. Conversation history has been reset.',
+      });
+    }
+  }, [addMessage, updateMemoryStats]);
+
+  /**
+   * Process a command with Hybrid Memory + Chain of Thought
    */
   const processCommand = useCallback(async (commandText: string) => {
     if (processingRef.current) return;
     processingRef.current = true;
     setIsProcessing(true);
+    setReactSteps([]);
 
     try {
       // Add user command to messages
@@ -138,24 +267,121 @@ export const useCLI = ({
         return;
       }
 
-      // Use Claude if enabled
+      // Check for memory management commands
+      if (commandText.toLowerCase() === '/memory clear') {
+        clearMemory();
+        return;
+      }
+
+      if (commandText.toLowerCase() === '/memory stats') {
+        const stats = orchestratorRef.current?.getMemoryStats();
+        if (stats) {
+          addMessage({
+            type: 'system',
+            content: `Memory Stats:\n- Total entries: ${stats.totalEntries}\n- Sessions: ${stats.sessionCount}\n- Storage: ${stats.storageSize}`,
+          });
+        }
+        return;
+      }
+
+      if (commandText.toLowerCase() === '/memory show') {
+        setShowMemoryPanel(true);
+        addMessage({
+          type: 'system',
+          content: 'Memory panel opened.',
+        });
+        return;
+      }
+
+      // Use Claude with Hybrid Orchestrator if enabled
+      if (claudeEnabled && claudeService && orchestratorRef.current) {
+        try {
+          // Show context resolution if applicable
+          const session = orchestratorRef.current.getActiveSession();
+          
+          // Execute with hybrid orchestrator
+          const result = await orchestratorRef.current.execute(
+            commandText,
+            {
+              sendMessage: async (messages, tools) => {
+                const kanbanStore = useKanbanStore.getState();
+                const boardContext = kanbanStore.currentBoard ? {
+                  boardName: kanbanStore.currentBoard.name,
+                  columns: kanbanStore.currentBoard.columns.map(c => c.title)
+                } : undefined;
+
+                const response = await claudeService.sendMessage(
+                  messages[messages.length - 1].content,
+                  boardContext,
+                  {
+                    previousMessages: messages.slice(0, -1).map(m => ({
+                      role: m.role as 'user' | 'assistant',
+                      content: m.content,
+                    })),
+                    enableMemory: memoryEnabled,
+                    enableThinking: thinkingMode,
+                  }
+                );
+
+                return {
+                  text: response.text,
+                  toolCalls: response.toolCalls?.map(tc => ({
+                    name: tc.name,
+                    input: tc.input,
+                  })),
+                };
+              },
+            }
+          );
+
+          // Show final response
+          if (result.finalResponse) {
+            // Add context resolution info if applicable
+            if (result.contextUsed && result.resolvedReferences && result.resolvedReferences.length > 0) {
+              addMessage({
+                type: 'system',
+                content: `Context: Referenced ${result.resolvedReferences.join(', ')}`,
+              });
+            }
+
+            addMessage({
+              type: 'ares',
+              content: result.finalResponse,
+            });
+          }
+
+          // Show completion summary
+          const toolCount = result.reactSession.steps.filter(s => s.type === 'action').length;
+          if (toolCount > 0) {
+            addMessage({
+              type: 'success',
+              content: `✓ Completed with ${toolCount} tool execution(s)`,
+            });
+          }
+
+        } catch (error) {
+          console.error('Hybrid processing error:', error);
+          addMessage({
+            type: 'error',
+            content: error instanceof Error ? error.message : 'Processing failed',
+          });
+        }
+        return;
+      }
+
+      // Fallback: Use basic Claude without hybrid features
       if (claudeEnabled && claudeService) {
         try {
-          // Get current board context
           const kanbanStore = useKanbanStore.getState();
           const boardContext = kanbanStore.currentBoard ? {
             boardName: kanbanStore.currentBoard.name,
             columns: kanbanStore.currentBoard.columns.map(c => c.title)
           } : undefined;
 
-          // Track response time
           const startTime = Date.now();
-          
-          // Send to Claude with native tool support
           const response = await claudeService.sendMessage(commandText, boardContext);
           const responseTime = Date.now() - startTime;
           
-          // Show main response text with response time
           if (response.text) {
             addMessage({
               type: 'ares',
@@ -164,19 +390,16 @@ export const useCLI = ({
             });
           }
 
-          // Execute any tool calls from Claude's native tool_use blocks
+          // Execute tool calls
           if (response.toolCalls && response.toolCalls.length > 0) {
-            // Create parent message for tool execution
             const toolParentMessageId = addMessage({
               type: 'tool',
               content: `🔧 Executing ${response.toolCalls.length} tool call(s)...`,
             });
             
             for (const toolUse of response.toolCalls) {
-              // Track execution time for each tool
               const toolStartTime = Date.now();
               
-              // Convert Claude's native ToolUse format to enhancedCLIService format
               const toolCall: ToolCall = {
                 name: toolUse.name,
                 arguments: toolUse.input
@@ -185,7 +408,6 @@ export const useCLI = ({
               const result = await executeBoardTool(toolCall, kanbanStore);
               const toolResponseTime = Date.now() - toolStartTime;
               
-              // Add tool call as child of parent message
               const toolCallMessageId = addMessage({
                 type: 'tool',
                 content: `call ${result.name}`,
@@ -193,7 +415,6 @@ export const useCLI = ({
                 responseTime: toolResponseTime,
               });
               
-              // Add tool result as child of the tool call
               addMessage({
                 type: result.success ? 'success' : 'error',
                 content: `${result.success ? '✓' : '✗'} ${result.name}: ${result.success 
@@ -204,7 +425,6 @@ export const useCLI = ({
                 parentId: toolCallMessageId,
               });
               
-              // If tool succeeded, add confirmation as child of result
               if (result.success) {
                 const itemName = toolCall.arguments.title || toolCall.arguments.card_title || toolCall.arguments.name || 'item';
                 addMessage({
@@ -225,11 +445,10 @@ export const useCLI = ({
         return;
       }
 
-      // Parse the command (legacy mode without Claude)
+      // Legacy mode without Claude
       const parsed = parseCommand(commandText);
-
-      // Validate the command
       const validation = validateCommand(parsed);
+      
       if (!validation.valid) {
         addMessage({
           type: 'error',
@@ -238,7 +457,6 @@ export const useCLI = ({
         return;
       }
 
-      // Handle built-in commands
       switch (parsed.type) {
         case 'help':
           const helpText = generateHelpText(parsed.action);
@@ -260,7 +478,6 @@ export const useCLI = ({
           break;
 
         default:
-          // For other commands, call the external handler if provided
           if (onCommand) {
             try {
               await onCommand(parsed);
@@ -286,8 +503,9 @@ export const useCLI = ({
     } finally {
       processingRef.current = false;
       setIsProcessing(false);
+      setCurrentThinking(null);
     }
-  }, [addMessage, handleClearOutput, onCommand, claudeService, claudeEnabled, thinkingMode]);
+  }, [addMessage, handleClearOutput, onCommand, claudeService, claudeEnabled, thinkingMode, memoryEnabled, clearMemory]);
 
   /**
    * Handle command submission
@@ -305,6 +523,16 @@ export const useCLI = ({
     handleCommandSubmit,
     handleClearOutput,
     addMessage,
+    
+    // Memory features
+    memoryStats,
+    clearMemory,
+    showMemoryPanel,
+    setShowMemoryPanel,
+    
+    // Chain of Thought features
+    currentThinking,
+    reactSteps,
   };
 };
 
